@@ -38,7 +38,18 @@ export function GuidePanel({ currentExercise }: GuidePanelProps) {
       setAiHelp(response);
     } catch (error) {
       console.error("Error fetching AI help:", error);
-      setAiHelpError(error instanceof Error ? error.message : "An unknown error occurred while fetching AI help.");
+      let errorMessage = "An unknown error occurred while fetching AI help.";
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+
+      if (errorMessage.includes("Please pass in the API key") || errorMessage.includes("GEMINI_API_KEY") || errorMessage.includes("GOOGLE_API_KEY")) {
+        setAiHelpError("It looks like the AI service API key is not configured. Please set the GEMINI_API_KEY or GOOGLE_API_KEY environment variable. For more details, refer to the Genkit documentation on Google AI.");
+      } else {
+        setAiHelpError(errorMessage);
+      }
     } finally {
       setIsLoadingAiHelp(false);
     }
@@ -169,5 +180,3 @@ export function GuidePanel({ currentExercise }: GuidePanelProps) {
     </Card>
   );
 }
-
-    
