@@ -6,11 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent as TabContentPrimitive } from "@/components/ui/tabs";
-import { BookOpen, CheckCircle, MessageSquare, Sparkles, Terminal, AlertTriangle, Loader2 } from "lucide-react";
-import type { Exercise } from "@/app/page"; // Import Exercise type from page.tsx
+import { BookOpen, CheckCircle, Sparkles, Terminal, AlertTriangle, Loader2 } from "lucide-react";
+import type { Exercise } from "@/app/page";
 import { explainExercise, type ExplainExerciseOutput, type ExplainExerciseInput } from "@/ai/flows/explain-exercise-flow";
 import { ScrollArea } from "./ui/scroll-area";
-import { SettingsDialog } from "./settings-dialog"; // Updated import
+import { Skeleton } from "./ui/skeleton"; // Import Skeleton
 
 export interface RunOutput {
   success: boolean;
@@ -19,57 +19,64 @@ export interface RunOutput {
 }
 
 interface GuidePanelProps {
-  currentExercise: Exercise; // Assume currentExercise is always provided when this panel is rendered
+  currentExercise: Exercise | null; // Can be null if no exercise is selected/loaded
   runOutput: RunOutput | null;
   isRunningCode: boolean;
   runError: string | null;
   showSettingsDialog: boolean;
   onShowSettingsDialogChange: (open: boolean) => void;
+  isLoadingExerciseDetails: boolean; // New prop
+  exerciseDetailLoadError: string | null; // New prop
 }
 
 const LOCAL_STORAGE_API_KEY_NAME = "userLocalGeminiApiKey";
 
-export function GuidePanel({ currentExercise, runOutput, isRunningCode, runError, showSettingsDialog, onShowSettingsDialogChange }: GuidePanelProps) {
+export function GuidePanel({ 
+  currentExercise, 
+  runOutput, 
+  isRunningCode, 
+  runError, 
+  showSettingsDialog, 
+  onShowSettingsDialogChange,
+  isLoadingExerciseDetails,
+  exerciseDetailLoadError 
+}: GuidePanelProps) {
   const [aiHelp, setAiHelp] = useState<ExplainExerciseOutput | null>(null);
   const [isLoadingAiHelp, setIsLoadingAiHelp] = useState(false);
   const [aiHelpError, setAiHelpError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("guide");
-  // showSettingsDialog state is now managed by parent (page.tsx)
 
   useEffect(() => {
-    // Clear AI help when exercise changes
     setAiHelp(null);
     setAiHelpError(null);
     
-    // Switch to output tab if code is running or has new output/error, unless AI help is active
     if ((isRunningCode || runOutput || runError) && activeTab !== 'ai-help') {
       setActiveTab("output");
-    } else if (!isRunningCode && !runOutput && !runError && activeTab === "output") {
-      // If no output and current tab is output, switch back to guide
+    } else if (!isRunningCode && !runOutput && !runError && activeTab === "output" && currentExercise) {
       setActiveTab("guide");
     }
 
-  }, [currentExercise, isRunningCode, runOutput, runError]); // Removed activeTab from deps to avoid loop
+  }, [currentExercise, isRunningCode, runOutput, runError]);
   
   useEffect(() => {
-    // Effect to switch to output tab when new output/error arrives
     if ((runOutput || runError || isRunningCode) && activeTab !== "output") {
-      // Only switch if not already on output, to avoid forcing user away from other tabs
-      // if they manually switched after run started.
-      // Let's be more assertive: if there's an output/error, show it.
       setActiveTab("output");
     }
-  }, [runOutput, runError, isRunningCode]);
+  }, [runOutput, runError, isRunningCode, activeTab]); // Added activeTab back
 
 
   const handleGetAiHelp = async () => {
+    if (!currentExercise || !currentExercise.code || !currentExercise.guide) { // Ensure details are loaded
+      setAiHelpError("Exercise details are not fully loaded. Please wait or try reselecting the exercise.");
+      return;
+    }
     setIsLoadingAiHelp(true);
     setAiHelp(null);
     setAiHelpError(null);
 
     const userApiKey = localStorage.getItem(LOCAL_STORAGE_API_KEY_NAME);
     const flowInput: ExplainExerciseInput = {
-      exercise: currentExercise, // currentExercise is guaranteed to be non-null here
+      exercise: currentExercise,
     };
 
     if (userApiKey) {
@@ -115,7 +122,8 @@ export function GuidePanel({ currentExercise, runOutput, isRunningCode, runError
     }
   };
 
-  const difficultyColor = (difficulty: Exercise['difficulty']) => {
+  const difficultyColor = (difficulty?: Exercise['difficulty']) => {
+    if (!difficulty) return 'border-border';
     switch (difficulty) {
       case 'Easy': return 'text-green-400 border-green-400/50';
       case 'Medium': return 'text-yellow-400 border-yellow-400/50';
@@ -123,6 +131,72 @@ export function GuidePanel({ currentExercise, runOutput, isRunningCode, runError
       default: return 'border-border';
     }
   };
+
+  const renderGuideContent = () => {
+    if (isLoadingExerciseDetails) {
+      return (
+        <div className="space-y-4 p-4">
+          <Skeleton className="h-8 w-3/4" /> {/* Title skeleton */}
+          <div className="flex flex-wrap gap-2">
+            <Skeleton className="h-6 w-20" /> <Skeleton className="h-6 w-20" /> <Skeleton className="h-6 w-16" />
+          </div>
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-5/6" />
+          <Skeleton className="h-12 w-full mt-2" /> {/* Hints skeleton */}
+        </div>
+      );
+    }
+
+    if (exerciseDetailLoadError) {
+      return (
+        <div className="p-4 text-destructive flex flex-col items-center justify-center h-full">
+          <AlertTriangle className="h-8 w-8 mb-2" />
+          <p className="font-semibold">Error Loading Exercise Details</p>
+          <p className="text-sm text-center mb-2">{exerciseDetailLoadError}</p>
+          <Button variant="outline" size="sm" onClick={() => window.location.reload()}>Try Reloading Page</Button>
+        </div>
+      );
+    }
+
+    if (!currentExercise) {
+      return <div className="p-4 text-muted-foreground">Select an exercise to see its guide.</div>;
+    }
+    
+    return (
+      <div className="space-y-4">
+        <h3 className="text-xl font-semibold">{currentExercise.name}</h3>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="secondary" className="gap-1"><BookOpen className="h-3 w-3"/>{currentExercise.category}</Badge>
+          <Badge variant="secondary" className={`${difficultyColor(currentExercise.difficulty)} gap-1`}><CheckCircle className="h-3 w-3"/>{currentExercise.difficulty}</Badge>
+          {currentExercise.tags.map(tag => (
+            <Badge key={tag} variant="outline">{tag}</Badge>
+          ))}
+        </div>
+        
+        <div>
+          <p className="text-foreground/80 mb-2 whitespace-pre-line">
+            {currentExercise.guide || "Guide not available."}
+          </p>
+        </div>
+
+        {currentExercise.hints && currentExercise.hints.length > 0 && (
+          <div>
+            <h4 className="font-semibold mb-1">Hints:</h4>
+            <ul className="list-disc list-inside text-foreground/70 space-y-1 text-sm">
+              {currentExercise.hints.map((hint, index) => (
+                <li key={index}>{hint}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+         {!currentExercise.guide && (!currentExercise.hints || currentExercise.hints.length === 0) && (
+            <p className="text-muted-foreground italic">No guide or hints available for this exercise.</p>
+        )}
+      </div>
+    );
+  };
+
 
   return (
     <>
@@ -138,33 +212,7 @@ export function GuidePanel({ currentExercise, runOutput, isRunningCode, runError
           
           <TabContentPrimitive value="guide" className="flex-grow overflow-hidden mt-0">
             <ScrollArea className="h-full p-4">
-              <div className="space-y-4">
-                <h3 className="text-xl font-semibold">{currentExercise.name}</h3>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary" className="gap-1"><BookOpen className="h-3 w-3"/>{currentExercise.category}</Badge>
-                  <Badge variant="secondary" className={`${difficultyColor(currentExercise.difficulty)} gap-1`}><CheckCircle className="h-3 w-3"/>{currentExercise.difficulty}</Badge>
-                  {currentExercise.tags.map(tag => (
-                    <Badge key={tag} variant="outline">{tag}</Badge>
-                  ))}
-                </div>
-                
-                <div>
-                  <p className="text-foreground/80 mb-2 whitespace-pre-line">
-                    {currentExercise.guide}
-                  </p>
-                </div>
-
-                {currentExercise.hints && currentExercise.hints.length > 0 && (
-                  <div>
-                    <h4 className="font-semibold mb-1">Hints:</h4>
-                    <ul className="list-disc list-inside text-foreground/70 space-y-1 text-sm">
-                      {currentExercise.hints.map((hint, index) => (
-                        <li key={index}>{hint}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
+              {renderGuideContent()}
             </ScrollArea>
           </TabContentPrimitive>
 
@@ -190,7 +238,7 @@ export function GuidePanel({ currentExercise, runOutput, isRunningCode, runError
                     <div className="text-destructive">
                       <p className="font-semibold">Error:</p>
                       <p>{runError}</p>
-                       {(runError.toLowerCase().includes("backend") || runError.toLowerCase().includes("url")) && (
+                       {(runError.toLowerCase().includes("backend") || runError.toLowerCase().includes("url") || runError.toLowerCase().includes("settings")) && (
                          <Button variant="link" size="sm" className="p-0 h-auto text-destructive hover:underline" onClick={() => onShowSettingsDialogChange(true)}>
                            Check Backend URL in Settings
                          </Button>
@@ -229,7 +277,12 @@ export function GuidePanel({ currentExercise, runOutput, isRunningCode, runError
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <h4 className="font-semibold flex items-center gap-2"><Sparkles className="h-4 w-4 text-accent"/>AI Assistance</h4>
-                  <Button onClick={handleGetAiHelp} disabled={isLoadingAiHelp} size="sm" variant="outline">
+                  <Button 
+                    onClick={handleGetAiHelp} 
+                    disabled={isLoadingAiHelp || !currentExercise || isLoadingExerciseDetails || !currentExercise.code } 
+                    size="sm" 
+                    variant="outline"
+                  >
                     {isLoadingAiHelp ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -240,6 +293,14 @@ export function GuidePanel({ currentExercise, runOutput, isRunningCode, runError
                     )}
                   </Button>
                 </div>
+
+                 {isLoadingExerciseDetails && !aiHelp && !aiHelpError && (
+                    <div className="p-3 rounded-md bg-muted/50 min-h-[100px] text-sm flex items-center justify-center">
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <span>Loading exercise details before AI help can be provided...</span>
+                    </div>
+                )}
+
 
                 {aiHelpError && (
                   <div className="p-3 rounded-md bg-destructive/20 text-destructive-foreground border border-destructive flex items-start gap-2">
@@ -256,7 +317,7 @@ export function GuidePanel({ currentExercise, runOutput, isRunningCode, runError
                   </div>
                 )}
 
-                {!aiHelp && !isLoadingAiHelp && !aiHelpError && (
+                {!aiHelp && !isLoadingAiHelp && !aiHelpError && !isLoadingExerciseDetails && (
                   <div className="p-3 rounded-md bg-muted/50 min-h-[100px] text-sm flex items-center justify-center">
                     <p className="text-center">Click "Get AI Explanation" for help with the current exercise. <br /> You may need to configure your API key via the Settings dialog.</p>
                   </div>
@@ -283,8 +344,13 @@ export function GuidePanel({ currentExercise, runOutput, isRunningCode, runError
           </TabContentPrimitive>
         </Tabs>
       </Card>
-      <SettingsDialog open={showSettingsDialog} onOpenChange={onShowSettingsDialogChange} />
+      {/* SettingsDialog is now rendered directly in page.tsx to avoid prop drilling issues
+          if it were to be opened from multiple places within GuidePanel,
+          but since only GuidePanel's error handling for AI help currently triggers it,
+          it was here. Moving it to page.tsx for global access.
+          Ensure `showSettingsDialog` and `onShowSettingsDialogChange` are correctly passed.
+      */}
+      {/* <SettingsDialog open={showSettingsDialog} onOpenChange={onShowSettingsDialogChange} /> */}
     </>
   );
 }
-

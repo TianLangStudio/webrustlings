@@ -1,7 +1,7 @@
 
 'use client';
 
-import React from "react"; // Added missing React import
+import React from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -11,18 +11,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ChevronDown, ListChecks } from "lucide-react";
-import type { Exercise } from "@/app/page"; // Import Exercise type from page.tsx
+import { ChevronDown, ListChecks, Loader2 } from "lucide-react"; // Added Loader2
+import type { Exercise } from "@/app/page";
 
 interface ExerciseSelectorProps {
-  selectedExercise: Exercise | null; // Can be null initially
-  onExerciseSelect: (exercise: Exercise) => void;
-  exercises: Exercise[]; // Exercises will be passed as a prop
-  disabled?: boolean;
+  selectedExercise: Exercise | null;
+  onExerciseSelect: (exercise: Exercise) => void; // Changed parameter to Exercise
+  exercises: Exercise[];
+  disabled?: boolean; // To disable while list or details are loading
 }
 
 export function ExerciseSelector({ selectedExercise, onExerciseSelect, exercises, disabled }: ExerciseSelectorProps) {
-  // Group exercises by category for the dropdown
   const exercisesByCategory: Record<string, Exercise[]> = exercises.reduce((acc, exercise) => {
     const category = exercise.category || "Uncategorized";
     if (!acc[category]) {
@@ -32,13 +31,20 @@ export function ExerciseSelector({ selectedExercise, onExerciseSelect, exercises
     return acc;
   }, {} as Record<string, Exercise[]>);
 
+  const triggerButtonText = () => {
+    if (disabled && !selectedExercise && exercises.length === 0) return "Loading Exercises...";
+    if (!selectedExercise && exercises.length > 0) return "Select an Exercise"; // Happens if first exercise detail load failed
+    if (selectedExercise) return selectedExercise.name;
+    return "No Exercises Loaded";
+  };
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" className="min-w-[280px] justify-between text-sm" disabled={disabled || !selectedExercise}>
+        <Button variant="outline" className="min-w-[280px] justify-between text-sm" disabled={disabled}>
           <div className="flex items-center gap-2">
-            <ListChecks className="h-4 w-4" />
-            <span className="truncate">{selectedExercise ? selectedExercise.name : "Loading Exercises..."}</span>
+            {disabled && !selectedExercise ? <Loader2 className="h-4 w-4 animate-spin" /> : <ListChecks className="h-4 w-4" />}
+            <span className="truncate">{triggerButtonText()}</span>
           </div>
           <ChevronDown className="h-4 w-4" />
         </Button>
@@ -51,16 +57,18 @@ export function ExerciseSelector({ selectedExercise, onExerciseSelect, exercises
               <DropdownMenuItem
                 key={exercise.id}
                 onSelect={() => onExerciseSelect(exercise)}
-                disabled={disabled}
+                disabled={disabled} // Individual items also disabled if main selector is
+                className={selectedExercise?.id === exercise.id ? "bg-accent/50" : ""}
               >
                 {exercise.name}
               </DropdownMenuItem>
             ))}
-            <DropdownMenuSeparator />
+            {/* Add separator only if it's not the last category */}
+            {Object.keys(exercisesByCategory)[Object.keys(exercisesByCategory).length - 1] !== category && <DropdownMenuSeparator />}
           </React.Fragment>
         ))}
         {Object.keys(exercisesByCategory).length === 0 && !disabled && (
-            <DropdownMenuItem disabled>No exercises loaded.</DropdownMenuItem>
+            <DropdownMenuItem disabled>No exercises found.</DropdownMenuItem>
         )}
          {disabled && Object.keys(exercisesByCategory).length === 0 && (
              <DropdownMenuItem disabled>Loading exercises...</DropdownMenuItem>
