@@ -28,8 +28,8 @@ export async function fetchAllExercisesFromServer(): Promise<Exercise[]> {
           return;
         }
 
-        // Corrected filter: Check apiEx.path for "00_intro/intro1"
-        if (typeof apiEx.path === 'string' && apiEx.path.trim() === "00_intro/intro1") {
+        // Skip the intro1 exercise as it doesn't require code modification
+        if (apiEx.name && apiEx.name.trim() === "intro1") {
           return; // Skip this exercise
         }
 
