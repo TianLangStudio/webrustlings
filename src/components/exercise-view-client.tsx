@@ -203,7 +203,14 @@ export default function ExerciseViewClient({ initialExercise, allExercises }: Ex
       <header className="flex items-center justify-between px-4 py-2 border-b border-border bg-card shadow-sm">
         <div className="flex items-center gap-4">
           <div className="flex flex-col">
-            <RustlingsLogo />
+            <a 
+              href="https://rustlingsweb.tianlang.tech/" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              aria-label="RustlingsWeb Homepage"
+            >
+              <RustlingsLogo />
+            </a>
             <span className="text-xs text-muted-foreground mt-1">
               Developed by Gemini and <Link href="https://www.tianlang.tech" target="_blank" className="text-primary hover:underline">FusionZhu</Link>
             </span>
