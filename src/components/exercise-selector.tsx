@@ -11,14 +11,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ChevronDown, ListChecks, Loader2 } from "lucide-react"; // Added Loader2
-import type { Exercise } from "@/app/page";
+import { ChevronDown, ListChecks, Loader2 } from "lucide-react";
+import type { Exercise } from "@/lib/types"; // Using shared type
 
 interface ExerciseSelectorProps {
   selectedExercise: Exercise | null;
-  onExerciseSelect: (exercise: Exercise) => void; // Changed parameter to Exercise
+  onExerciseSelect: (exercise: Exercise) => void; 
   exercises: Exercise[];
-  disabled?: boolean; // To disable while list or details are loading
+  disabled?: boolean; 
 }
 
 export function ExerciseSelector({ selectedExercise, onExerciseSelect, exercises, disabled }: ExerciseSelectorProps) {
@@ -33,7 +33,7 @@ export function ExerciseSelector({ selectedExercise, onExerciseSelect, exercises
 
   const triggerButtonText = () => {
     if (disabled && !selectedExercise && exercises.length === 0) return "Loading Exercises...";
-    if (!selectedExercise && exercises.length > 0) return "Select an Exercise"; // Happens if first exercise detail load failed
+    if (!selectedExercise && exercises.length > 0) return "Select an Exercise"; 
     if (selectedExercise) return selectedExercise.name;
     return "No Exercises Loaded";
   };
@@ -41,9 +41,9 @@ export function ExerciseSelector({ selectedExercise, onExerciseSelect, exercises
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" className="min-w-[280px] justify-between text-sm" disabled={disabled}>
+        <Button variant="outline" className="min-w-[280px] justify-between text-sm" disabled={disabled || exercises.length === 0}>
           <div className="flex items-center gap-2">
-            {disabled && !selectedExercise ? <Loader2 className="h-4 w-4 animate-spin" /> : <ListChecks className="h-4 w-4" />}
+            {(disabled && !selectedExercise && exercises.length === 0) ? <Loader2 className="h-4 w-4 animate-spin" /> : <ListChecks className="h-4 w-4" />}
             <span className="truncate">{triggerButtonText()}</span>
           </div>
           <ChevronDown className="h-4 w-4" />
@@ -56,14 +56,13 @@ export function ExerciseSelector({ selectedExercise, onExerciseSelect, exercises
             {categoryExercises.map((exercise) => (
               <DropdownMenuItem
                 key={exercise.id}
-                onSelect={() => onExerciseSelect(exercise)}
-                disabled={disabled} // Individual items also disabled if main selector is
+                onSelect={() => onExerciseSelect(exercise)} // This will now trigger navigation
+                disabled={disabled} 
                 className={selectedExercise?.id === exercise.id ? "bg-accent/50" : ""}
               >
                 {exercise.name}
               </DropdownMenuItem>
             ))}
-            {/* Add separator only if it's not the last category */}
             {Object.keys(exercisesByCategory)[Object.keys(exercisesByCategory).length - 1] !== category && <DropdownMenuSeparator />}
           </React.Fragment>
         ))}
