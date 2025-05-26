@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Button } from "@/components/ui/button";
@@ -18,9 +19,6 @@ export default function RustlingsPage() {
           <ExerciseSelector />
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" className="text-xs px-3 py-1 h-auto hidden md:inline-flex">
-             Select Exercise
-          </Button>
           <span className="text-xs text-muted-foreground hidden lg:inline">
             Based on work by <Link href="https://github.com/rust-lang/rustlings" target="_blank" className="text-primary hover:underline">mini</Link> and <Link href="https://github.com/ गौरी" target="_blank" className="text-primary hover:underline">FusionZhu</Link>
           </span>
