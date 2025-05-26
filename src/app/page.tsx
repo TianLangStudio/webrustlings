@@ -20,7 +20,7 @@ export default function RustlingsPage() {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground hidden lg:inline">
-            Based on work by <Link href="https://github.com/rust-lang/rustlings" target="_blank" className="text-primary hover:underline">mini</Link> and <Link href="https://github.com/ गौरी" target="_blank" className="text-primary hover:underline">FusionZhu</Link>
+            Developed by Gemini and <Link href="https://www.tianlang.tech" target="_blank" className="text-primary hover:underline">FusionZhu</Link>
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -42,13 +42,13 @@ export default function RustlingsPage() {
       </header>
 
       {/* Main Content */}
-      <main className="flex flex-1 overflow-hidden">
+      <main className="flex flex-1 overflow-hidden flex-col md:flex-row">
         {/* Left Panel: Code Editor */}
-        <div className="w-3/5 border-r border-border overflow-y-auto">
+        <div className="w-full md:w-3/5 border-b md:border-b-0 md:border-r border-border overflow-y-auto">
           <EditorPanel />
         </div>
         {/* Right Panel: Guide/Output/AI Help */}
-        <div className="w-2/5 overflow-y-auto">
+        <div className="w-full md:w-2/5 overflow-y-auto">
           <GuidePanel />
         </div>
       </main>
