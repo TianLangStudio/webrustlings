@@ -30,10 +30,16 @@ export default function RustlingsPage() {
 
   useEffect(() => {
     setIsClient(true);
-    setEditorCode(currentExercise.code); // Reset editor code when exercise changes
-    setRunOutput(null); // Clear previous run output
-    setRunError(null); // Clear previous run error
-  }, [currentExercise]);
+    // No need to set editorCode here if it's also in the currentExercise effect
+  }, []);
+
+  useEffect(() => {
+    if (isClient) { // Ensure this runs only on client and after initial mount
+        setEditorCode(currentExercise.code); // Reset editor code when exercise changes
+        setRunOutput(null); // Clear previous run output
+        setRunError(null); // Clear previous run error
+    }
+  }, [currentExercise, isClient]);
 
   const getBackendUrl = (): string => {
     if (typeof window !== 'undefined') {
@@ -78,7 +84,9 @@ export default function RustlingsPage() {
         } catch (e) {
             errorData = { error: `HTTP error! Status: ${response.status}. Response body was not valid JSON.` };
         }
-        throw new Error(errorData.error || errorData.message || `HTTP error! Status: ${response.status}`);
+        // Use errorData.message if available, otherwise errorData.error
+        const message = errorData.message || errorData.error || `HTTP error! Status: ${response.status}`;
+        throw new Error(message);
       }
 
       const result: RunOutput = await response.json();
@@ -115,25 +123,27 @@ export default function RustlingsPage() {
     } finally {
       setIsRunningCode(false);
     }
-  }, [editorCode, toast, setShowSettingsDialog]); // Dependencies for useCallback
+  }, [editorCode, toast, setShowSettingsDialog]);
 
-  // Effect to automatically run code when "I AM NOT DONE" is removed
   useEffect(() => {
     const previousCode = prevEditorCodeRef.current;
-    prevEditorCodeRef.current = editorCode; // Update ref for the next comparison
+    prevEditorCodeRef.current = editorCode; 
 
-    if (typeof previousCode === 'string' && 
+    if (isClient && typeof previousCode === 'string' && 
         previousCode.includes(RUN_MARKER) && 
         !editorCode.includes(RUN_MARKER)) {
       if (!isRunningCode) {
-        // console.log("Auto-running code due to 'I AM NOT DONE' removal.");
         handleRunCode();
       }
     }
-  }, [editorCode, isRunningCode, handleRunCode]); // handleRunCode is now a memoized dependency
+  }, [editorCode, isRunningCode, handleRunCode, isClient]);
 
   const currentExerciseIndex = allExercises.findIndex(ex => ex.id === currentExercise.id);
   const progressPercentage = allExercises.length > 0 && isClient ? ((currentExerciseIndex + 1) / allExercises.length) * 100 : 0;
+
+  const handleExerciseSelect = (exercise: Exercise) => {
+    setCurrentExercise(exercise);
+  };
 
   const goToPreviousExercise = () => {
     if (currentExerciseIndex > 0) {
@@ -159,8 +169,6 @@ export default function RustlingsPage() {
 
 
   if (!isClient) {
-    // Render nothing or a loading indicator on the server to avoid hydration mismatches
-    // with localStorage-dependent values like progressPercentage or backendUrl.
     return null; 
   }
 
@@ -215,9 +223,8 @@ export default function RustlingsPage() {
         {/* Left Panel: Code Editor */}
         <div className="w-full md:w-3/5 border-b md:border-b-0 md:border-r border-border overflow-y-auto">
           <EditorPanel 
-            currentExercise={currentExercise}
-            value={editorCode}
-            onChange={setEditorCode}
+            value={editorCode} // Pass editorCode state
+            onChange={setEditorCode} // Pass handler to update editorCode
           />
         </div>
         {/* Right Panel: Guide/Output/AI Help */}
@@ -227,7 +234,6 @@ export default function RustlingsPage() {
             runOutput={runOutput}
             isRunningCode={isRunningCode}
             runError={runError}
-            // Pass settings dialog state and handler
             showSettingsDialog={showSettingsDialog}
             onShowSettingsDialogChange={setShowSettingsDialog}
           />
