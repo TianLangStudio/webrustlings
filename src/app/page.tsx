@@ -26,7 +26,7 @@ interface ApiExercise {
   path: string; // Unique ID, e.g., "intro/intro1.rs"
   directory: string; // Directory name, used as {directory} in detail URL segment
   hint?: string; // Initial guide/hint from the list API
-  code?: string; // Initial code from the list API
+  code?: string; // Initial code from the list API (this will be the placeholder)
   hints?: string[];
   difficulty?: 'Easy' | 'Medium' | 'Hard';
   tags?: string[];
@@ -43,19 +43,18 @@ export interface Exercise {
   name: string; // Exercise name, from apiEx.name
   category: string; // Chapter name
   directory: string; // Directory for detail API call
-  code: string; // Full code, fetched from detail API
-  guide: string; // Full guide, fetched from detail API
+  code: string; // Full code, initially from list's `code` field, then fetched from detail API
+  guide: string; // Full guide, fetched from initial list API's `hint` field
   hints: string[];
   difficulty: 'Easy' | 'Medium' | 'Hard';
   tags: string[];
 }
 
-interface ExerciseDetailResponse {
-  code: string;
-  guide: string;
-  // Potentially other fields like name, hints, etc. if the detail API returns them
-  // For now, assuming at least code and guide
-}
+// No longer needed as detail API returns plain text for code
+// interface ExerciseDetailResponse {
+//   code: string;
+//   guide: string; 
+// }
 
 
 export default function RustlingsPage() {
@@ -78,13 +77,13 @@ export default function RustlingsPage() {
   const [exerciseDetailLoadError, setExerciseDetailLoadError] = useState<string | null>(null);
 
 
-  const fetchSingleExerciseDetails = useCallback(async (directory: string, name: string): Promise<ExerciseDetailResponse> => {
+  const fetchSingleExerciseDetails = useCallback(async (directory: string, name: string): Promise<string> => {
     const detailUrl = `${EXERCISE_DETAIL_API_URL_BASE}/${directory}/${name}`;
     const response = await fetch(detailUrl);
     if (!response.ok) {
       throw new Error(`Failed to fetch exercise details for ${directory}/${name}: ${response.status} ${response.statusText}`);
     }
-    return response.json();
+    return response.text(); // Returns the raw code as text
   }, []);
 
   const selectExercise = useCallback(async (exerciseToSelect: Exercise | null) => {
@@ -95,9 +94,9 @@ export default function RustlingsPage() {
     }
 
     // Set current exercise immediately for UI responsiveness (e.g., selector update)
-    // It might have stale code/guide until details are fetched
+    // It will have the initial code/guide from the list API until details are fetched.
     setCurrentExercise(exerciseToSelect);
-    setEditorCode(exerciseToSelect.code); // Display initial code from list, or empty if not available
+    setEditorCode(exerciseToSelect.code); // Display initial code from list
     setRunOutput(null);
     setRunError(null);
     // setAiHelp(null); // Assuming aiHelp is managed in GuidePanel
@@ -106,26 +105,26 @@ export default function RustlingsPage() {
     setExerciseDetailLoadError(null);
 
     try {
-      // Fetch the full code and guide
-      const detailedData = await fetchSingleExerciseDetails(exerciseToSelect.directory, exerciseToSelect.name);
+      // Fetch the full code as text
+      const fetchedCode: string = await fetchSingleExerciseDetails(exerciseToSelect.directory, exerciseToSelect.name);
       
+      // The guide was already populated from the initial list API's 'hint' field.
+      // So, we just update the code.
       const updatedExercise: Exercise = {
-        ...exerciseToSelect,
-        code: detailedData.code,
-        guide: detailedData.guide,
-        // If detail API returns more (e.g. updated hints, difficulty), merge them here
+        ...exerciseToSelect, // This carries over the existing guide, hints, category, etc.
+        code: fetchedCode,    // Update with the fetched detailed code
       };
 
       setCurrentExercise(updatedExercise);
       setAllExercises(prevExercises => 
         prevExercises.map(ex => ex.id === updatedExercise.id ? updatedExercise : ex)
       );
-      setEditorCode(updatedExercise.code);
+      setEditorCode(updatedExercise.code); // Set editor code to the newly fetched detailed code
 
     } catch (error: any) {
       console.error("Failed to load exercise details:", error);
       setExerciseDetailLoadError(error.message || "An unknown error occurred while loading exercise details.");
-      // Keep currentExercise as is (with potentially old data), or clear editor if preferred
+      // Keep currentExercise as is (with potentially old/placeholder code), or clear editor if preferred
       // setEditorCode(""); // Or keep stale code: editorCode is already exerciseToSelect.code
     } finally {
       setIsLoadingExerciseDetails(false);
@@ -154,8 +153,8 @@ export default function RustlingsPage() {
               name: apiEx.name,
               category: chapter.name,
               directory: apiEx.directory,
-              code: apiEx.code || "", // Initial code from list, might be placeholder
-              guide: apiEx.hint || "", // Initial guide from list, might be placeholder
+              code: apiEx.code || "", // Initial code from list, will be placeholder/overwritten
+              guide: apiEx.hint || "Guide not available for this exercise.", // Guide from list API's 'hint' field
               hints: apiEx.hints || [],
               difficulty: apiEx.difficulty || 'Easy',
               tags: apiEx.tags || [],
@@ -187,7 +186,7 @@ export default function RustlingsPage() {
   const getBackendUrl = (): string => {
     if (typeof window !== 'undefined') {
       const savedUrl = localStorage.getItem(LOCAL_STORAGE_BACKEND_URL_KEY);
-      if (savedUrl) {
+      if (savedUrl && savedUrl.trim() !== "") { // Ensure saved URL is not empty
         return savedUrl;
       }
     }
@@ -252,7 +251,7 @@ export default function RustlingsPage() {
       let userFriendlyErrorMessage = "An unexpected error occurred while contacting the backend.";
       
       if (error.message && error.message.toLowerCase().includes("failed to fetch")) {
-        userFriendlyErrorMessage = `Could not connect to the backend at ${backendUrl}. Please ensure the backend server is running, accessible, and CORS is configured. You can change the backend URL in Settings.`;
+        userFriendlyErrorMessage = `Could not connect to the backend at ${backendUrl}. Please ensure it's running, accessible, and CORS is configured. You can change the URL in Settings.`;
       } else if (error.message) {
         userFriendlyErrorMessage = error.message;
       }
@@ -266,14 +265,14 @@ export default function RustlingsPage() {
     } finally {
       setIsRunningCode(false);
     }
-  }, [editorCode, toast, currentExercise, isLoadingExerciseDetails]); // Added isLoadingExerciseDetails
+  }, [editorCode, toast, currentExercise, isLoadingExerciseDetails]);
 
   useEffect(() => {
     const previousCode = prevEditorCodeRef.current;
     prevEditorCodeRef.current = editorCode; 
 
     if (isClient && typeof previousCode === 'string' && 
-        currentExercise && !isLoadingExerciseDetails && // Ensure details are loaded
+        currentExercise && !isLoadingExerciseDetails &&
         previousCode.includes(RUN_MARKER) && 
         !editorCode.includes(RUN_MARKER)) {
       if (!isRunningCode) {
@@ -298,8 +297,8 @@ export default function RustlingsPage() {
   },[currentExerciseIndex, allExercises, selectExercise]);
 
   const handleResetCode = () => {
-    if (currentExercise) { // currentExercise here should have the authoritative code
-      setEditorCode(currentExercise.code);
+    if (currentExercise) { 
+      setEditorCode(currentExercise.code); // This uses the detailed code if already fetched
       setRunOutput(null);
       setRunError(null);
       toast({
@@ -313,7 +312,7 @@ export default function RustlingsPage() {
     return null; 
   }
   
-  if (isLoadingExercises && isClient) { // Loading initial list
+  if (isLoadingExercises && isClient) { 
     return (
       <div className="flex flex-col h-screen bg-background text-foreground items-center justify-center p-4">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
@@ -322,7 +321,7 @@ export default function RustlingsPage() {
     );
   }
 
-  if (exerciseLoadError && isClient) { // Error loading initial list
+  if (exerciseLoadError && isClient) { 
     return (
       <div className="flex flex-col h-screen bg-background text-destructive-foreground items-center justify-center p-4 text-center">
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
@@ -333,13 +332,12 @@ export default function RustlingsPage() {
     );
   }
 
-  // If list is loaded, but no exercises exist (e.g. API returned empty)
   if (!isLoadingExercises && allExercises.length === 0 && isClient) {
     return (
       <div className="flex flex-col h-screen bg-background text-foreground items-center justify-center p-4 text-center">
         <AlertTriangle className="h-12 w-12 text-muted-foreground mb-4" />
         <h2 className="text-xl font-semibold mb-2">No Exercises Available</h2>
-        <p className="mb-4">The exercise list is empty. Please check the data source.</p>
+        <p className="mb-4">The exercise list is empty. Please check the data source or API.</p>
         <Button onClick={() => window.location.reload()}>Try Again</Button>
       </div>
     );
@@ -359,7 +357,7 @@ export default function RustlingsPage() {
           </div>
           <ExerciseSelector 
             selectedExercise={currentExercise}
-            onExerciseSelect={selectExercise} // Use the new selectExercise function
+            onExerciseSelect={selectExercise} 
             exercises={allExercises}
             disabled={isLoadingExercises || allExercises.length === 0 || isLoadingExerciseDetails}
           />
@@ -403,9 +401,9 @@ export default function RustlingsPage() {
         <div className="w-full md:w-3/5 border-b md:border-b-0 md:border-r border-border overflow-y-auto">
           {isLoadingExercises || !currentExercise || isLoadingExerciseDetails ? (
             <div className="p-4 h-full flex flex-col">
-              <Skeleton className="h-8 w-1/4 mb-4" /> {/* Title skeleton */}
+              <Skeleton className="h-8 w-1/4 mb-4" /> 
               <div className="flex-grow">
-                <Skeleton className="h-full w-full" /> {/* Editor content skeleton */}
+                <Skeleton className="h-full w-full" /> 
               </div>
             </div>
            ) : (
@@ -419,12 +417,12 @@ export default function RustlingsPage() {
         <div className="w-full md:w-2/5 overflow-y-auto">
           {isLoadingExercises || !currentExercise || isLoadingExerciseDetails ? (
              <div className="p-4 h-full space-y-4">
-                <Skeleton className="h-10 w-full mb-4" /> {/* Tabs skeleton */}
-                <Skeleton className="h-8 w-1/3 mb-2" /> {/* Exercise title skeleton */}
-                <Skeleton className="h-4 w-1/2 mb-1" /> {/* Badges skeleton */}
+                <Skeleton className="h-10 w-full mb-4" /> 
+                <Skeleton className="h-8 w-1/3 mb-2" /> 
+                <Skeleton className="h-4 w-1/2 mb-1" /> 
                 <Skeleton className="h-4 w-3/4 mb-1" />
                 <Skeleton className="h-4 w-full mb-4" />
-                <Skeleton className="h-20 w-full" /> {/* Guide text/hints skeleton */}
+                <Skeleton className="h-20 w-full" /> 
              </div>
           ) : (
             <>
@@ -433,12 +431,11 @@ export default function RustlingsPage() {
                 runOutput={runOutput}
                 isRunningCode={isRunningCode}
                 runError={runError}
-                showSettingsDialog={showSettingsDialog} // Pass state for settings dialog
-                onShowSettingsDialogChange={setShowSettingsDialog} // Pass handler for settings dialog
+                showSettingsDialog={showSettingsDialog} 
+                onShowSettingsDialogChange={setShowSettingsDialog} 
                 isLoadingExerciseDetails={isLoadingExerciseDetails}
                 exerciseDetailLoadError={exerciseDetailLoadError}
             />
-            {/* Moved SettingsDialog to be conditionally rendered by GuidePanel or here if global */}
             </>
           )}
         </div>
@@ -447,3 +444,5 @@ export default function RustlingsPage() {
     </div>
   );
 }
+
+    
