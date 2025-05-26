@@ -38,17 +38,18 @@ export default function RustlingsPage() {
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-2 border-b border-border bg-card shadow-sm">
         <div className="flex items-center gap-4">
-          <RustlingsLogo />
+          <div className="flex flex-col">
+            <RustlingsLogo />
+            <span className="text-xs text-muted-foreground mt-1">
+              Developed by Gemini and <Link href="https://www.tianlang.tech" target="_blank" className="text-primary hover:underline">FusionZhu</Link>
+            </span>
+          </div>
           <ExerciseSelector 
             selectedExercise={currentExercise}
             onExerciseSelect={handleExerciseSelect}
           />
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground hidden lg:inline">
-            Developed by Gemini and <Link href="https://www.tianlang.tech" target="_blank" className="text-primary hover:underline">FusionZhu</Link>
-          </span>
-        </div>
+        
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" aria-label="Previous Exercise" onClick={goToPreviousExercise} disabled={currentExerciseIndex === 0}>
             <ChevronLeft className="h-5 w-5" />
