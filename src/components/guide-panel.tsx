@@ -5,12 +5,12 @@ import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger, TabsContent as TabContentPrimitive } from "@/components/ui/tabs"; // Renamed TabsContent to avoid conflict
+import { Tabs, TabsList, TabsTrigger, TabsContent as TabContentPrimitive } from "@/components/ui/tabs";
 import { BookOpen, CheckCircle, MessageSquare, Sparkles, Terminal, AlertTriangle, Loader2 } from "lucide-react";
-import type { Exercise } from "./exercise-selector";
+import type { Exercise } from "@/app/page"; // Import Exercise type from page.tsx
 import { explainExercise, type ExplainExerciseOutput, type ExplainExerciseInput } from "@/ai/flows/explain-exercise-flow";
 import { ScrollArea } from "./ui/scroll-area";
-import { ApiKeyInstructionsDialog } from "./api-key-instructions-dialog";
+import { SettingsDialog } from "./settings-dialog"; // Updated import
 
 export interface RunOutput {
   success: boolean;
@@ -19,41 +19,47 @@ export interface RunOutput {
 }
 
 interface GuidePanelProps {
-  currentExercise: Exercise;
+  currentExercise: Exercise; // Assume currentExercise is always provided when this panel is rendered
   runOutput: RunOutput | null;
   isRunningCode: boolean;
   runError: string | null;
+  showSettingsDialog: boolean;
+  onShowSettingsDialogChange: (open: boolean) => void;
 }
 
 const LOCAL_STORAGE_API_KEY_NAME = "userLocalGeminiApiKey";
 
-export function GuidePanel({ currentExercise, runOutput, isRunningCode, runError }: GuidePanelProps) {
+export function GuidePanel({ currentExercise, runOutput, isRunningCode, runError, showSettingsDialog, onShowSettingsDialogChange }: GuidePanelProps) {
   const [aiHelp, setAiHelp] = useState<ExplainExerciseOutput | null>(null);
   const [isLoadingAiHelp, setIsLoadingAiHelp] = useState(false);
   const [aiHelpError, setAiHelpError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("guide");
-  const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
+  // showSettingsDialog state is now managed by parent (page.tsx)
 
   useEffect(() => {
-    // Clear AI help when exercise changes and AI tab is not active
-    if (activeTab !== "ai-help") {
-      setAiHelp(null);
-      setAiHelpError(null);
-    }
-     // Switch to output tab if code is running or has new output/error
-    if (isRunningCode || runOutput || runError) {
+    // Clear AI help when exercise changes
+    setAiHelp(null);
+    setAiHelpError(null);
+    
+    // Switch to output tab if code is running or has new output/error, unless AI help is active
+    if ((isRunningCode || runOutput || runError) && activeTab !== 'ai-help') {
       setActiveTab("output");
+    } else if (!isRunningCode && !runOutput && !runError && activeTab === "output") {
+      // If no output and current tab is output, switch back to guide
+      setActiveTab("guide");
     }
 
-  }, [currentExercise, activeTab]);
+  }, [currentExercise, isRunningCode, runOutput, runError]); // Removed activeTab from deps to avoid loop
   
   useEffect(() => {
     // Effect to switch to output tab when new output/error arrives
-    // and the tab isn't already output. This ensures user sees the result.
     if ((runOutput || runError || isRunningCode) && activeTab !== "output") {
+      // Only switch if not already on output, to avoid forcing user away from other tabs
+      // if they manually switched after run started.
+      // Let's be more assertive: if there's an output/error, show it.
       setActiveTab("output");
     }
-  }, [runOutput, runError, isRunningCode, activeTab]);
+  }, [runOutput, runError, isRunningCode]);
 
 
   const handleGetAiHelp = async () => {
@@ -63,7 +69,7 @@ export function GuidePanel({ currentExercise, runOutput, isRunningCode, runError
 
     const userApiKey = localStorage.getItem(LOCAL_STORAGE_API_KEY_NAME);
     const flowInput: ExplainExerciseInput = {
-      exercise: currentExercise,
+      exercise: currentExercise, // currentExercise is guaranteed to be non-null here
     };
 
     if (userApiKey) {
@@ -92,14 +98,14 @@ export function GuidePanel({ currentExercise, runOutput, isRunningCode, runError
       const isInvalidUserKeyError = userApiKey && upperErrorMessage.includes("API_KEY_INVALID");
 
       if (isInvalidUserKeyError) {
-        setAiHelpError("Your saved API key appears to be invalid. Please check it or try generating a new one.");
-        setShowApiKeyDialog(true); 
+        setAiHelpError("Your saved API key appears to be invalid. Please check it or try generating a new one in Settings.");
+        onShowSettingsDialogChange(true); 
       } else if (isMissingGlobalKeyError && !userApiKey) {
-        setAiHelpError("API Key is required. Please configure it using the dialog.");
-        setShowApiKeyDialog(true);
+        setAiHelpError("API Key is required. Please configure it using the Settings dialog.");
+        onShowSettingsDialogChange(true);
       } else if (isMissingGlobalKeyError && userApiKey) {
-        setAiHelpError("There was an issue with the API key. Please check your saved key or global configuration.");
-        setShowApiKeyDialog(true);
+        setAiHelpError("There was an issue with the API key. Please check your saved key or global configuration in Settings.");
+        onShowSettingsDialogChange(true);
       }
       else {
         setAiHelpError(errorMessage);
@@ -117,7 +123,6 @@ export function GuidePanel({ currentExercise, runOutput, isRunningCode, runError
       default: return 'border-border';
     }
   };
-
 
   return (
     <>
@@ -185,10 +190,15 @@ export function GuidePanel({ currentExercise, runOutput, isRunningCode, runError
                     <div className="text-destructive">
                       <p className="font-semibold">Error:</p>
                       <p>{runError}</p>
+                       {(runError.toLowerCase().includes("backend") || runError.toLowerCase().includes("url")) && (
+                         <Button variant="link" size="sm" className="p-0 h-auto text-destructive hover:underline" onClick={() => onShowSettingsDialogChange(true)}>
+                           Check Backend URL in Settings
+                         </Button>
+                       )}
                     </div>
                   )}
                   {!isRunningCode && !runError && !runOutput && (
-                    <p className="text-muted-foreground">&gt; Click "Run" to see output.</p>
+                    <p className="text-muted-foreground">&gt; Click "Run" to see output or solve the exercise.</p>
                   )}
                   {runOutput && (
                     <>
@@ -237,9 +247,9 @@ export function GuidePanel({ currentExercise, runOutput, isRunningCode, runError
                     <div>
                       <p className="font-semibold">Error</p>
                       <p className="text-sm">{aiHelpError}</p>
-                      {showApiKeyDialog && (
-                        <Button variant="link" size="sm" className="p-0 h-auto text-destructive-foreground hover:underline" onClick={() => setShowApiKeyDialog(true)}>
-                          Open API Key Configuration
+                      {(aiHelpError.toLowerCase().includes("api key") || aiHelpError.toLowerCase().includes("settings")) && (
+                        <Button variant="link" size="sm" className="p-0 h-auto text-destructive-foreground hover:underline" onClick={() => onShowSettingsDialogChange(true)}>
+                          Open Settings Dialog
                         </Button>
                       )}
                     </div>
@@ -248,7 +258,7 @@ export function GuidePanel({ currentExercise, runOutput, isRunningCode, runError
 
                 {!aiHelp && !isLoadingAiHelp && !aiHelpError && (
                   <div className="p-3 rounded-md bg-muted/50 min-h-[100px] text-sm flex items-center justify-center">
-                    <p className="text-center">Click "Get AI Explanation" for help with the current exercise. <br /> You may need to configure your API key via the button or dialog if prompted.</p>
+                    <p className="text-center">Click "Get AI Explanation" for help with the current exercise. <br /> You may need to configure your API key via the Settings dialog.</p>
                   </div>
                 )}
 
@@ -273,7 +283,8 @@ export function GuidePanel({ currentExercise, runOutput, isRunningCode, runError
           </TabContentPrimitive>
         </Tabs>
       </Card>
-      <ApiKeyInstructionsDialog open={showApiKeyDialog} onOpenChange={setShowApiKeyDialog} />
+      <SettingsDialog open={showSettingsDialog} onOpenChange={onShowSettingsDialogChange} />
     </>
   );
 }
+
