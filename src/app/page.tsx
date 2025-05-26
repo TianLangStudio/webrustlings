@@ -45,8 +45,8 @@ export interface Exercise {
   name: string;
   category: string;
   directory: string;
-  code: string; // Can be placeholder initially, then fetched
-  guide: string; // Can be placeholder initially
+  code: string; 
+  guide: string; 
   hints: string[];
   difficulty: 'Easy' | 'Medium' | 'Hard';
   tags: string[];
@@ -86,7 +86,7 @@ export default function RustlingsPage() {
     if (!response.ok) {
       throw new Error(`Failed to fetch exercise details for ${directory}/${name}: ${response.status} ${response.statusText}`);
     }
-    return response.text(); // Expecting plain text code
+    return response.text(); 
   }, []);
 
   const fetchExerciseSolution = useCallback(async (directory: string, name: string): Promise<string | null> => {
@@ -98,7 +98,7 @@ export default function RustlingsPage() {
     try {
       const response = await fetch(solutionUrl);
       if (response.status === 404) {
-        return null; // Solution not found, not an error for the user here
+        return null; 
       }
       if (!response.ok) {
         throw new Error(`Failed to fetch exercise solution for ${directory}/${name}: ${response.status} ${response.statusText}`);
@@ -111,7 +111,7 @@ export default function RustlingsPage() {
   }, []);
 
   const selectExercise = useCallback(async (exerciseToSelect: Exercise | null) => {
-    if (!exerciseToSelect || !exerciseToSelect.id) { // Ensure exerciseToSelect and its id are valid
+    if (!exerciseToSelect || !exerciseToSelect.id) { 
         setCurrentExercise(null);
         setEditorCode("");
         setRunOutput(null);
@@ -119,7 +119,6 @@ export default function RustlingsPage() {
         return;
     }
 
-    // Preserve solution if switching to the same exercise, otherwise reset.
     setCurrentExercise(prev => ({
         ...exerciseToSelect, 
         solutionCode: (prev && prev.id === exerciseToSelect.id) ? prev.solutionCode : undefined, 
@@ -131,12 +130,10 @@ export default function RustlingsPage() {
     
     setIsLoadingExerciseDetails(true);
     setExerciseDetailLoadError(null);
-    // Reset solution loading state for the new exercise unless it was already fetched
     if (!exerciseToSelect.solutionFetched) {
       setIsLoadingSolution(false);
       setSolutionLoadError(null);
     }
-
 
     let fetchedCode = exerciseToSelect.code;
     let updatedExerciseWithCode = { ...exerciseToSelect };
@@ -147,7 +144,6 @@ export default function RustlingsPage() {
         ...exerciseToSelect,
         code: fetchedCode,
       };
-      // Preserve solution details from the current state if they exist for this exercise
       setCurrentExercise(prev => ({
         ...updatedExerciseWithCode, 
         solutionCode: prev?.id === updatedExerciseWithCode.id ? prev.solutionCode : undefined, 
@@ -164,13 +160,11 @@ export default function RustlingsPage() {
       setIsLoadingExerciseDetails(false);
     }
 
-    // Fetch solution for the (potentially updated) exercise
-    // Only fetch if it hasn't been fetched before or if a previous attempt for this exercise had an error.
     const currentExerciseForSolution = allExercises.find(ex => ex.id === updatedExerciseWithCode.id) || updatedExerciseWithCode;
 
     if (currentExerciseForSolution && (!currentExerciseForSolution.solutionFetched || (currentExerciseForSolution.solutionFetched && solutionLoadError && currentExercise?.id === currentExerciseForSolution.id))) {
       setIsLoadingSolution(true);
-      setSolutionLoadError(null); // Clear previous solution error for this attempt
+      setSolutionLoadError(null); 
       try {
         const fetchedSolutionCode = await fetchExerciseSolution(currentExerciseForSolution.directory, currentExerciseForSolution.name);
         
@@ -203,8 +197,6 @@ export default function RustlingsPage() {
             solutionFetched: currentExerciseForSolution.solutionFetched,
         }));
     }
-
-
   }, [fetchSingleExerciseDetails, fetchExerciseSolution, solutionLoadError, currentExercise, allExercises]); 
 
 
@@ -224,8 +216,8 @@ export default function RustlingsPage() {
         const exercises: Exercise[] = [];
         chapters.forEach(chapter => {
           chapter.exercises.forEach(apiEx => {
-            // Filter out "00_intro/intro1"
-            if (apiEx.path === "00_intro/intro1") {
+            // Filter out "00_intro/intro1" more robustly
+            if (apiEx.path && apiEx.path.trim() === "00_intro/intro1") {
               return; // Skip this exercise
             }
 
@@ -536,3 +528,4 @@ export default function RustlingsPage() {
     
 
     
+
