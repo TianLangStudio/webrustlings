@@ -89,9 +89,10 @@ export default function RustlingsPage() {
         try {
             errorData = await response.json();
         } catch (e) {
-            errorData = { error: `HTTP error! status: ${response.status}`};
+            // If response.json() fails, it means the body wasn't valid JSON
+            errorData = { error: `HTTP error! Status: ${response.status}. Response was not valid JSON.` };
         }
-        throw new Error(errorData.error || errorData.message || `HTTP error! status: ${response.status}`);
+        throw new Error(errorData.error || errorData.message || `HTTP error! Status: ${response.status}`);
       }
 
       const result: RunOutput = await response.json();
@@ -110,11 +111,19 @@ export default function RustlingsPage() {
       }
     } catch (error: any) {
       console.error("Failed to run code:", error);
-      const errorMessage = error.message || "An unexpected error occurred while contacting the backend.";
-      setRunError(errorMessage);
+      let userFriendlyErrorMessage = "An unexpected error occurred while contacting the backend.";
+      
+      // Check for "Failed to fetch" specifically
+      if (error.message && error.message.toLowerCase().includes("failed to fetch")) {
+        userFriendlyErrorMessage = "Could not connect to the backend at http://192.168.0.101:5001. Please ensure the backend server is running, accessible from your network, and that CORS is configured correctly to allow requests from this application's origin.";
+      } else if (error.message) {
+        userFriendlyErrorMessage = error.message;
+      }
+
+      setRunError(userFriendlyErrorMessage);
       toast({
         title: "Error Running Code",
-        description: errorMessage,
+        description: userFriendlyErrorMessage,
         variant: "destructive"
       });
     } finally {
