@@ -224,8 +224,8 @@ export default function RustlingsPage() {
         const exercises: Exercise[] = [];
         chapters.forEach(chapter => {
           chapter.exercises.forEach(apiEx => {
-            // Filter out "00_intro/intro2"
-            if (apiEx.path === "00_intro/intro2") {
+            // Filter out "00_intro/intro1"
+            if (apiEx.path === "00_intro/intro1") {
               return; // Skip this exercise
             }
 
