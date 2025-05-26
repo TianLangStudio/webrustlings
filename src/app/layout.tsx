@@ -1,15 +1,11 @@
 import type { Metadata } from 'next';
-import { Geist_Sans as GeistSans } from 'next/font/google'; // Updated import for Geist Sans
+import { GeistSans } from 'geist/font/sans'; // Corrected import for Geist Sans
 import './globals.css';
-import { Toaster } from "@/components/ui/toaster"; // Added Toaster
+import { Toaster } from "@/components/ui/toaster";
 
-const geistSans = GeistSans({
-  variable: '--font-geist-sans',
-  subsets: ['latin'],
-});
-
-// Removed Geist Mono as it's not explicitly requested for body text.
-// If needed for specific elements like code blocks, it can be added selectively.
+// GeistSans from 'geist/font/sans' directly provides .variable and .className
+// No need to call it as a function or specify subsets/variable name here.
+// The `variable` property (e.g., GeistSans.variable) will provide the CSS variable name like '--font-geist-sans'.
 
 export const metadata: Metadata = {
   title: 'React Project Starter',
@@ -22,7 +18,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={geistSans.variable}>
+    <html lang="en" className={GeistSans.variable}>
       <body className="antialiased">
         {children}
         <Toaster />
