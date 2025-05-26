@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Button } from "@/components/ui/button";
@@ -10,9 +11,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ChevronDown, ListChecks } from "lucide-react";
-import { useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
 
-const exercises = [
+// Define Exercise type
+export interface Exercise {
+  id: string;
+  name: string;
+  category: string;
+}
+
+// Export exercises array
+export const exercises: Exercise[] = [
   {
     id: "intro1",
     name: "Intro 1: Remove 'I AM NOT DONE'",
@@ -21,11 +30,17 @@ const exercises = [
   { id: "variables1", name: "Variables 1", category: "Variables" },
   { id: "functions1", name: "Functions 1", category: "Functions" },
   // Add more exercises here
+  { id: "if1", name: "If 1", category: "Control Flow"},
+  { id: "quiz1", name: "Quiz 1", category: "Primitives"},
+  { id: "move_semantics1", name: "Move Semantics 1", category: "Ownership"},
 ];
 
-export function ExerciseSelector() {
-  const [selectedExercise, setSelectedExercise] = useState(exercises[0]);
+interface ExerciseSelectorProps {
+  selectedExercise: Exercise;
+  onExerciseSelect: (exercise: Exercise) => void;
+}
 
+export function ExerciseSelector({ selectedExercise, onExerciseSelect }: ExerciseSelectorProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -44,7 +59,7 @@ export function ExerciseSelector() {
         {exercises.map((exercise) => (
           <DropdownMenuItem
             key={exercise.id}
-            onSelect={() => setSelectedExercise(exercise)}
+            onSelect={() => onExerciseSelect(exercise)}
           >
             {exercise.name}
           </DropdownMenuItem>
