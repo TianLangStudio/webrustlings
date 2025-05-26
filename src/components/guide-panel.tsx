@@ -6,11 +6,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent as TabContentPrimitive } from "@/components/ui/tabs";
-import { BookOpen, CheckCircle, Sparkles, Terminal, AlertTriangle, Loader2 } from "lucide-react";
+import { BookOpen, CheckCircle, Sparkles, Terminal, AlertTriangle, Loader2, Lightbulb } from "lucide-react";
 import type { Exercise } from "@/app/page";
 import { explainExercise, type ExplainExerciseOutput, type ExplainExerciseInput } from "@/ai/flows/explain-exercise-flow";
 import { ScrollArea } from "./ui/scroll-area";
-import { Skeleton } from "./ui/skeleton"; // Import Skeleton
+import { Skeleton } from "./ui/skeleton";
+import { Textarea } from "./ui/textarea"; // For displaying solution code
 
 export interface RunOutput {
   success: boolean;
@@ -19,14 +20,16 @@ export interface RunOutput {
 }
 
 interface GuidePanelProps {
-  currentExercise: Exercise | null; // Can be null if no exercise is selected/loaded
+  currentExercise: Exercise | null;
   runOutput: RunOutput | null;
   isRunningCode: boolean;
   runError: string | null;
   showSettingsDialog: boolean;
   onShowSettingsDialogChange: (open: boolean) => void;
-  isLoadingExerciseDetails: boolean; // New prop
-  exerciseDetailLoadError: string | null; // New prop
+  isLoadingExerciseDetails: boolean;
+  exerciseDetailLoadError: string | null;
+  isLoadingSolution: boolean;
+  solutionLoadError: string | null;
 }
 
 const LOCAL_STORAGE_API_KEY_NAME = "userLocalGeminiApiKey";
@@ -39,7 +42,9 @@ export function GuidePanel({
   showSettingsDialog, 
   onShowSettingsDialogChange,
   isLoadingExerciseDetails,
-  exerciseDetailLoadError 
+  exerciseDetailLoadError,
+  isLoadingSolution,
+  solutionLoadError
 }: GuidePanelProps) {
   const [aiHelp, setAiHelp] = useState<ExplainExerciseOutput | null>(null);
   const [isLoadingAiHelp, setIsLoadingAiHelp] = useState(false);
@@ -50,23 +55,38 @@ export function GuidePanel({
     setAiHelp(null);
     setAiHelpError(null);
     
-    if ((isRunningCode || runOutput || runError) && activeTab !== 'ai-help') {
-      setActiveTab("output");
-    } else if (!isRunningCode && !runOutput && !runError && activeTab === "output" && currentExercise) {
-      setActiveTab("guide");
+    // Determine default tab based on states
+    if (activeTab !== 'ai-help') { // Don't switch away from AI help if user explicitly selected it
+        if (isRunningCode || runOutput || runError) {
+            setActiveTab("output");
+        } else if (currentExercise && !isLoadingExerciseDetails && !exerciseDetailLoadError && activeTab === "output") {
+            // If output tab was active but there's no longer output/run info, switch to guide (or solution if available)
+            if (currentExercise.solutionCode && currentExercise.solutionFetched && !isLoadingSolution && !solutionLoadError) {
+                // setActiveTab("solution"); // Or keep guide as primary default
+                setActiveTab("guide");
+            } else {
+                setActiveTab("guide");
+            }
+        } else if (currentExercise && activeTab !== "guide" && activeTab !== "solution") {
+             setActiveTab("guide"); // Fallback to guide if no other condition met
+        }
     }
 
-  }, [currentExercise, isRunningCode, runOutput, runError]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentExercise, isRunningCode, runOutput, runError, isLoadingExerciseDetails, exerciseDetailLoadError, isLoadingSolution, solutionLoadError ]); // Removed activeTab from deps here to stop it from overriding user choice
   
+
   useEffect(() => {
-    if ((runOutput || runError || isRunningCode) && activeTab !== "output") {
+    // This effect ensures that if a run is triggered, the output tab becomes active.
+    if ((runOutput || runError || isRunningCode) && activeTab !== "output" && activeTab !== "ai-help") {
       setActiveTab("output");
     }
-  }, [runOutput, runError, isRunningCode, activeTab]); // Added activeTab back
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runOutput, runError, isRunningCode]);
 
 
   const handleGetAiHelp = async () => {
-    if (!currentExercise || !currentExercise.code || !currentExercise.guide) { // Ensure details are loaded
+    if (!currentExercise || !currentExercise.code || !currentExercise.guide) {
       setAiHelpError("Exercise details are not fully loaded. Please wait or try reselecting the exercise.");
       return;
     }
@@ -136,14 +156,14 @@ export function GuidePanel({
     if (isLoadingExerciseDetails) {
       return (
         <div className="space-y-4 p-4">
-          <Skeleton className="h-8 w-3/4" /> {/* Title skeleton */}
+          <Skeleton className="h-8 w-3/4" />
           <div className="flex flex-wrap gap-2">
             <Skeleton className="h-6 w-20" /> <Skeleton className="h-6 w-20" /> <Skeleton className="h-6 w-16" />
           </div>
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-5/6" />
-          <Skeleton className="h-12 w-full mt-2" /> {/* Hints skeleton */}
+          <Skeleton className="h-12 w-full mt-2" />
         </div>
       );
     }
@@ -197,15 +217,51 @@ export function GuidePanel({
     );
   };
 
+  const renderSolutionContent = () => {
+    if (isLoadingSolution) {
+      return (
+        <div className="p-4 flex items-center justify-center text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin mr-2" />
+          <span>Loading solution...</span>
+        </div>
+      );
+    }
+    if (solutionLoadError) {
+      return (
+        <div className="p-4 text-destructive flex flex-col items-center justify-center h-full">
+          <AlertTriangle className="h-8 w-8 mb-2" />
+          <p className="font-semibold">Error Loading Solution</p>
+          <p className="text-sm text-center mb-2">{solutionLoadError}</p>
+        </div>
+      );
+    }
+    if (currentExercise && currentExercise.solutionFetched && !currentExercise.solutionCode) {
+      return <div className="p-4 text-muted-foreground">Solution not available for this exercise.</div>;
+    }
+    if (currentExercise && currentExercise.solutionCode) {
+      return (
+        <Textarea
+          value={currentExercise.solutionCode}
+          readOnly
+          className="h-full w-full resize-none rounded-none border-0 bg-muted/30 p-4 font-mono text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+          aria-label="Exercise solution code"
+        />
+      );
+    }
+    // Fallback if solution hasn't been fetched yet (and not loading/error)
+    return <div className="p-4 text-muted-foreground">Solution will be loaded when available.</div>;
+  };
+
 
   return (
     <>
       <Card className="h-full flex flex-col bg-card border-none shadow-none">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-grow flex flex-col">
           <CardHeader className="px-4 pt-3 pb-0">
-            <TabsList className="grid w-full grid-cols-3 bg-muted/50">
+            <TabsList className="grid w-full grid-cols-4 bg-muted/50">
               <TabsTrigger value="guide">Guide</TabsTrigger>
               <TabsTrigger value="output">Output</TabsTrigger>
+              <TabsTrigger value="solution">Solution <Lightbulb className="h-3.5 w-3.5 ml-1 opacity-70"/></TabsTrigger>
               <TabsTrigger value="ai-help">AI Help</TabsTrigger>
             </TabsList>
           </CardHeader>
@@ -269,6 +325,12 @@ export function GuidePanel({
                   )}
                 </div>
               </div>
+            </ScrollArea>
+          </TabContentPrimitive>
+
+          <TabContentPrimitive value="solution" className="flex-grow overflow-hidden mt-0">
+            <ScrollArea className="h-full p-0"> {/* p-0 for textarea to fill */}
+              {renderSolutionContent()}
             </ScrollArea>
           </TabContentPrimitive>
 
@@ -344,13 +406,7 @@ export function GuidePanel({
           </TabContentPrimitive>
         </Tabs>
       </Card>
-      {/* SettingsDialog is now rendered directly in page.tsx to avoid prop drilling issues
-          if it were to be opened from multiple places within GuidePanel,
-          but since only GuidePanel's error handling for AI help currently triggers it,
-          it was here. Moving it to page.tsx for global access.
-          Ensure `showSettingsDialog` and `onShowSettingsDialogChange` are correctly passed.
-      */}
-      {/* <SettingsDialog open={showSettingsDialog} onOpenChange={onShowSettingsDialogChange} /> */}
     </>
   );
 }
+

@@ -18,15 +18,17 @@ const DEFAULT_BACKEND_URL = "https://rustlingsweb.tianlang.tech/execute";
 const LOCAL_STORAGE_BACKEND_URL_KEY = "userBackendUrl";
 const RUN_MARKER = "// I AM NOT DONE";
 const EXERCISES_API_URL = "https://rustlingsweb.tianlang.tech/exercises"; // For the list
-const EXERCISE_DETAIL_API_URL_BASE = "https://rustlingsweb.tianlang.tech/exercises"; // Base for single exercise
+const EXERCISE_DETAIL_API_URL_BASE = "https://rustlingsweb.tianlang.tech/exercises"; // Base for single exercise code
+const EXERCISE_SOLUTION_API_URL_BASE = "https://rustlingsweb.tianlang.tech/solutions"; // Base for single exercise solution
+
 
 // Interface for what the /exercises list API returns for each exercise
 interface ApiExercise {
-  name: string; // Exercise name, also used as {name} in detail URL segment
-  path: string; // Unique ID, e.g., "intro/intro1.rs"
-  directory: string; // Directory name, used as {directory} in detail URL segment
-  hint?: string; // Initial guide/hint from the list API
-  code?: string; // Initial code from the list API (this will be the placeholder)
+  name: string;
+  path: string;
+  directory: string;
+  hint?: string;
+  code?: string;
   hints?: string[];
   difficulty?: 'Easy' | 'Medium' | 'Hard';
   tags?: string[];
@@ -39,23 +41,18 @@ interface ApiChapter {
 
 // Internal Exercise representation
 export interface Exercise {
-  id: string; // Unique ID, from apiEx.path
-  name: string; // Exercise name, from apiEx.name
-  category: string; // Chapter name
-  directory: string; // Directory for detail API call
-  code: string; // Full code, initially from list's `code` field, then fetched from detail API
-  guide: string; // Full guide, fetched from initial list API's `hint` field
+  id: string;
+  name: string;
+  category: string;
+  directory: string;
+  code: string;
+  guide: string;
   hints: string[];
   difficulty: 'Easy' | 'Medium' | 'Hard';
   tags: string[];
+  solutionCode?: string;
+  solutionFetched?: boolean; // To track if solution fetch was attempted
 }
-
-// No longer needed as detail API returns plain text for code
-// interface ExerciseDetailResponse {
-//   code: string;
-//   guide: string; 
-// }
-
 
 export default function RustlingsPage() {
   const [allExercises, setAllExercises] = useState<Exercise[]>([]);
@@ -70,11 +67,14 @@ export default function RustlingsPage() {
   const { toast } = useToast();
   const prevEditorCodeRef = useRef<string>();
 
-  const [isLoadingExercises, setIsLoadingExercises] = useState(true); // For initial list
-  const [exerciseLoadError, setExerciseLoadError] = useState<string | null>(null); // For initial list
+  const [isLoadingExercises, setIsLoadingExercises] = useState(true);
+  const [exerciseLoadError, setExerciseLoadError] = useState<string | null>(null);
 
-  const [isLoadingExerciseDetails, setIsLoadingExerciseDetails] = useState(false); // For selected exercise details
+  const [isLoadingExerciseDetails, setIsLoadingExerciseDetails] = useState(false);
   const [exerciseDetailLoadError, setExerciseDetailLoadError] = useState<string | null>(null);
+
+  const [isLoadingSolution, setIsLoadingSolution] = useState(false);
+  const [solutionLoadError, setSolutionLoadError] = useState<string | null>(null);
 
 
   const fetchSingleExerciseDetails = useCallback(async (directory: string, name: string): Promise<string> => {
@@ -83,53 +83,96 @@ export default function RustlingsPage() {
     if (!response.ok) {
       throw new Error(`Failed to fetch exercise details for ${directory}/${name}: ${response.status} ${response.statusText}`);
     }
-    return response.text(); // Returns the raw code as text
+    return response.text();
+  }, []);
+
+  const fetchExerciseSolution = useCallback(async (directory: string, name: string): Promise<string | null> => {
+    const solutionUrl = `${EXERCISE_SOLUTION_API_URL_BASE}/${directory}/${name}`;
+    try {
+      const response = await fetch(solutionUrl);
+      if (response.status === 404) {
+        return null; // Solution not found, not an error for the user here
+      }
+      if (!response.ok) {
+        throw new Error(`Failed to fetch exercise solution for ${directory}/${name}: ${response.status} ${response.statusText}`);
+      }
+      return response.text();
+    } catch (error) {
+      console.error(`Error fetching solution for ${directory}/${name}:`, error);
+      // Re-throw to be caught by the caller and set solutionLoadError
+      throw error; 
+    }
   }, []);
 
   const selectExercise = useCallback(async (exerciseToSelect: Exercise | null) => {
     if (!exerciseToSelect) {
         setCurrentExercise(null);
         setEditorCode("");
+        setRunOutput(null);
+        setRunError(null);
         return;
     }
 
-    // Set current exercise immediately for UI responsiveness (e.g., selector update)
-    // It will have the initial code/guide from the list API until details are fetched.
-    setCurrentExercise(exerciseToSelect);
-    setEditorCode(exerciseToSelect.code); // Display initial code from list
+    setCurrentExercise(prev => ({...exerciseToSelect, solutionCode: prev?.id === exerciseToSelect.id ? prev.solutionCode : undefined, solutionFetched: prev?.id === exerciseToSelect.id ? prev.solutionFetched : false }));
+    setEditorCode(exerciseToSelect.code); 
     setRunOutput(null);
     setRunError(null);
-    // setAiHelp(null); // Assuming aiHelp is managed in GuidePanel
-
+    
     setIsLoadingExerciseDetails(true);
     setExerciseDetailLoadError(null);
+    setIsLoadingSolution(false); // Reset solution loading state
+    setSolutionLoadError(null); // Reset solution error state
+
+
+    let fetchedCode = exerciseToSelect.code;
+    let updatedExerciseWithCode = { ...exerciseToSelect };
 
     try {
-      // Fetch the full code as text
-      const fetchedCode: string = await fetchSingleExerciseDetails(exerciseToSelect.directory, exerciseToSelect.name);
-      
-      // The guide was already populated from the initial list API's 'hint' field.
-      // So, we just update the code.
-      const updatedExercise: Exercise = {
-        ...exerciseToSelect, // This carries over the existing guide, hints, category, etc.
-        code: fetchedCode,    // Update with the fetched detailed code
+      fetchedCode = await fetchSingleExerciseDetails(exerciseToSelect.directory, exerciseToSelect.name);
+      updatedExerciseWithCode = {
+        ...exerciseToSelect,
+        code: fetchedCode,
       };
-
-      setCurrentExercise(updatedExercise);
+      setCurrentExercise(prev => ({...updatedExerciseWithCode, solutionCode: prev?.solutionCode, solutionFetched: prev?.solutionFetched}));
       setAllExercises(prevExercises => 
-        prevExercises.map(ex => ex.id === updatedExercise.id ? updatedExercise : ex)
+        prevExercises.map(ex => ex.id === updatedExerciseWithCode.id ? updatedExerciseWithCode : ex)
       );
-      setEditorCode(updatedExercise.code); // Set editor code to the newly fetched detailed code
-
+      setEditorCode(updatedExerciseWithCode.code);
     } catch (error: any) {
       console.error("Failed to load exercise details:", error);
       setExerciseDetailLoadError(error.message || "An unknown error occurred while loading exercise details.");
-      // Keep currentExercise as is (with potentially old/placeholder code), or clear editor if preferred
-      // setEditorCode(""); // Or keep stale code: editorCode is already exerciseToSelect.code
     } finally {
       setIsLoadingExerciseDetails(false);
     }
-  }, [fetchSingleExerciseDetails]);
+
+    // After code is fetched (or if using initial code), fetch the solution
+    // But only if it hasn't been fetched before for this exercise (or if previous fetch failed and we want to retry)
+    if (updatedExerciseWithCode && (!updatedExerciseWithCode.solutionFetched || solutionLoadError)) {
+      setIsLoadingSolution(true);
+      setSolutionLoadError(null);
+      try {
+        const fetchedSolutionCode = await fetchExerciseSolution(updatedExerciseWithCode.directory, updatedExerciseWithCode.name);
+        const finalExerciseState = { 
+          ...updatedExerciseWithCode, 
+          solutionCode: fetchedSolutionCode ?? undefined, // Ensure it's undefined if null
+          solutionFetched: true 
+        };
+        setCurrentExercise(finalExerciseState);
+        setAllExercises(prevExercises => 
+          prevExercises.map(ex => ex.id === finalExerciseState.id ? finalExerciseState : ex)
+        );
+      } catch (error: any) {
+        console.error("Failed to load exercise solution:", error);
+        setSolutionLoadError(error.message || "An unknown error occurred while loading the solution.");
+        // Keep currentExercise as is, but mark solution as fetched (with error)
+        setCurrentExercise(prev => prev ? {...prev, solutionFetched: true} : null);
+
+      } finally {
+        setIsLoadingSolution(false);
+      }
+    }
+
+  }, [fetchSingleExerciseDetails, fetchExerciseSolution, solutionLoadError]);
 
 
   useEffect(() => {
@@ -153,22 +196,22 @@ export default function RustlingsPage() {
               name: apiEx.name,
               category: chapter.name,
               directory: apiEx.directory,
-              code: apiEx.code || "", // Initial code from list, will be placeholder/overwritten
-              guide: apiEx.hint || "Guide not available for this exercise.", // Guide from list API's 'hint' field
+              code: apiEx.code || `// Code for ${apiEx.name} will be loaded...\n\n\n\n\n\n\n// ${RUN_MARKER}`,
+              guide: apiEx.hint || "Guide not available for this exercise.",
               hints: apiEx.hints || [],
               difficulty: apiEx.difficulty || 'Easy',
               tags: apiEx.tags || [],
+              solutionFetched: false, // Initialize solutionFetched
             });
           });
         });
 
         setAllExercises(exercises);
         if (exercises.length > 0) {
-          // Automatically select and load details for the first exercise
           await selectExercise(exercises[0]);
         } else {
           setExerciseLoadError("No exercises found in the list.");
-          setCurrentExercise(null); // Ensure currentExercise is null if list is empty
+          setCurrentExercise(null);
         }
       } catch (error: any) {
         console.error("Failed to load exercises list:", error);
@@ -180,13 +223,13 @@ export default function RustlingsPage() {
     };
 
     fetchExercisesList();
-  }, [selectExercise]);
+  }, [selectExercise]); // selectExercise is memoized, so this should be fine
 
 
   const getBackendUrl = (): string => {
     if (typeof window !== 'undefined') {
       const savedUrl = localStorage.getItem(LOCAL_STORAGE_BACKEND_URL_KEY);
-      if (savedUrl && savedUrl.trim() !== "") { // Ensure saved URL is not empty
+      if (savedUrl && savedUrl.trim() !== "") {
         return savedUrl;
       }
     }
@@ -194,7 +237,7 @@ export default function RustlingsPage() {
   };
 
   const handleRunCode = useCallback(async () => {
-    if (!currentExercise || isLoadingExerciseDetails) return;
+    if (!currentExercise || isLoadingExerciseDetails || isRunningCode) return;
 
     setIsRunningCode(true);
     setRunOutput(null);
@@ -265,11 +308,15 @@ export default function RustlingsPage() {
     } finally {
       setIsRunningCode(false);
     }
-  }, [editorCode, toast, currentExercise, isLoadingExerciseDetails]);
+  }, [editorCode, toast, currentExercise, isLoadingExerciseDetails, isRunningCode]);
 
   useEffect(() => {
     const previousCode = prevEditorCodeRef.current;
-    prevEditorCodeRef.current = editorCode; 
+    // Only update prevEditorCodeRef if editorCode has actually changed.
+    // This avoids issues if other state changes trigger this effect without code change.
+    if (editorCode !== previousCode) {
+        prevEditorCodeRef.current = editorCode;
+    }
 
     if (isClient && typeof previousCode === 'string' && 
         currentExercise && !isLoadingExerciseDetails &&
@@ -298,7 +345,7 @@ export default function RustlingsPage() {
 
   const handleResetCode = () => {
     if (currentExercise) { 
-      setEditorCode(currentExercise.code); // This uses the detailed code if already fetched
+      setEditorCode(currentExercise.code); 
       setRunOutput(null);
       setRunError(null);
       toast({
@@ -359,7 +406,7 @@ export default function RustlingsPage() {
             selectedExercise={currentExercise}
             onExerciseSelect={selectExercise} 
             exercises={allExercises}
-            disabled={isLoadingExercises || allExercises.length === 0 || isLoadingExerciseDetails}
+            disabled={isLoadingExercises || allExercises.length === 0 || isLoadingExerciseDetails || isLoadingSolution}
           />
         </div>
         
@@ -367,10 +414,10 @@ export default function RustlingsPage() {
           <Button variant="ghost" size="icon" aria-label="Settings" onClick={() => setShowSettingsDialog(true)}>
             <Settings className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon" aria-label="Previous Exercise" onClick={goToPreviousExercise} disabled={isLoadingExercises || isLoadingExerciseDetails || currentExerciseIndex <= 0 || isRunningCode}>
+          <Button variant="ghost" size="icon" aria-label="Previous Exercise" onClick={goToPreviousExercise} disabled={isLoadingExercises || isLoadingExerciseDetails || isLoadingSolution || currentExerciseIndex <= 0 || isRunningCode}>
             <ChevronLeft className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon" aria-label="Next Exercise" onClick={goToNextExercise} disabled={isLoadingExercises || isLoadingExerciseDetails || currentExerciseIndex === -1 || currentExerciseIndex >= allExercises.length - 1 || isRunningCode}>
+          <Button variant="ghost" size="icon" aria-label="Next Exercise" onClick={goToNextExercise} disabled={isLoadingExercises || isLoadingExerciseDetails || isLoadingSolution || currentExerciseIndex === -1 || currentExerciseIndex >= allExercises.length - 1 || isRunningCode}>
             <ChevronRight className="h-5 w-5" />
           </Button>
           <Button variant="outline" size="sm" className="gap-1.5" onClick={handleResetCode} disabled={isLoadingExercises || isLoadingExerciseDetails || !currentExercise || isRunningCode}>
@@ -392,7 +439,7 @@ export default function RustlingsPage() {
 
       {/* Progress Bar */}
       <div className="px-4 py-2 bg-card">
-         {(isLoadingExercises || (currentExercise && isLoadingExerciseDetails)) ? <Skeleton className="h-2 w-full" /> : <Progress value={progressPercentage} className="w-full h-2" />}
+         {(isLoadingExercises || (currentExercise && (isLoadingExerciseDetails || isLoadingSolution))) ? <Skeleton className="h-2 w-full" /> : <Progress value={progressPercentage} className="w-full h-2" />}
       </div>
 
       {/* Main Content */}
@@ -415,7 +462,7 @@ export default function RustlingsPage() {
         </div>
         {/* Right Panel: Guide/Output/AI Help */}
         <div className="w-full md:w-2/5 overflow-y-auto">
-          {isLoadingExercises || !currentExercise || isLoadingExerciseDetails ? (
+          {isLoadingExercises || !currentExercise ? ( // Simplified condition for initial load of panels
              <div className="p-4 h-full space-y-4">
                 <Skeleton className="h-10 w-full mb-4" /> 
                 <Skeleton className="h-8 w-1/3 mb-2" /> 
@@ -435,6 +482,8 @@ export default function RustlingsPage() {
                 onShowSettingsDialogChange={setShowSettingsDialog} 
                 isLoadingExerciseDetails={isLoadingExerciseDetails}
                 exerciseDetailLoadError={exerciseDetailLoadError}
+                isLoadingSolution={isLoadingSolution}
+                solutionLoadError={solutionLoadError}
             />
             </>
           )}
