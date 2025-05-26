@@ -66,7 +66,7 @@ export default function RustlingsPage() {
     const payload = {
       channel: "stable",
       mode: "debug",
-      edition: "2021",
+      edition: "2021", // You might want to make this dynamic or match Rust Playground options
       crateType: "bin",
       tests: false,
       code: editorCode,
@@ -74,7 +74,8 @@ export default function RustlingsPage() {
     };
 
     try {
-      const response = await fetch('/api/rust-playground-run', {
+      // Call the external backend
+      const response = await fetch('http://192.168.0.101:5001/execute', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -83,8 +84,14 @@ export default function RustlingsPage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to run code. Server returned an error." }));
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        // Try to parse error from backend, otherwise use generic message
+        let errorData;
+        try {
+            errorData = await response.json();
+        } catch (e) {
+            errorData = { error: `HTTP error! status: ${response.status}`};
+        }
+        throw new Error(errorData.error || errorData.message || `HTTP error! status: ${response.status}`);
       }
 
       const result: RunOutput = await response.json();
@@ -97,16 +104,17 @@ export default function RustlingsPage() {
       } else {
         toast({
           title: "Run Failed",
-          description: "There were issues with your code. Check the output tab.",
+          description: result.stderr || "There were issues with your code. Check the output tab.",
           variant: "destructive"
         });
       }
     } catch (error: any) {
       console.error("Failed to run code:", error);
-      setRunError(error.message || "An unexpected error occurred.");
+      const errorMessage = error.message || "An unexpected error occurred while contacting the backend.";
+      setRunError(errorMessage);
       toast({
         title: "Error Running Code",
-        description: error.message || "An unexpected error occurred.",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
