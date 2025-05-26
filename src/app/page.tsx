@@ -25,10 +25,10 @@ const EXERCISE_SOLUTION_API_URL_BASE = "https://rustlingsweb.tianlang.tech/solut
 // Interface for what the /exercises list API returns for each exercise
 interface ApiExercise {
   name: string;
-  path: string;
+  path: string; // Used as ID
   directory: string;
-  hint?: string;
-  code?: string;
+  hint?: string; // Used as guide
+  code?: string; // Initial code from list
   hints?: string[];
   difficulty?: 'Easy' | 'Medium' | 'Hard';
   tags?: string[];
@@ -45,13 +45,13 @@ export interface Exercise {
   name: string;
   category: string;
   directory: string;
-  code: string;
-  guide: string;
+  code: string; // Can be placeholder initially, then fetched
+  guide: string; // Can be placeholder initially
   hints: string[];
   difficulty: 'Easy' | 'Medium' | 'Hard';
   tags: string[];
   solutionCode?: string;
-  solutionFetched?: boolean; // To track if solution fetch was attempted
+  solutionFetched?: boolean;
 }
 
 export default function RustlingsPage() {
@@ -78,15 +78,22 @@ export default function RustlingsPage() {
 
 
   const fetchSingleExerciseDetails = useCallback(async (directory: string, name: string): Promise<string> => {
+    if (!directory || !name) {
+      throw new Error(`Exercise directory or name is invalid. Cannot fetch details.`);
+    }
     const detailUrl = `${EXERCISE_DETAIL_API_URL_BASE}/${directory}/${name}`;
     const response = await fetch(detailUrl);
     if (!response.ok) {
       throw new Error(`Failed to fetch exercise details for ${directory}/${name}: ${response.status} ${response.statusText}`);
     }
-    return response.text();
+    return response.text(); // Expecting plain text code
   }, []);
 
   const fetchExerciseSolution = useCallback(async (directory: string, name: string): Promise<string | null> => {
+    if (!directory || !name) {
+      console.warn(`Exercise directory or name is invalid. Cannot fetch solution.`);
+      return null;
+    }
     const solutionUrl = `${EXERCISE_SOLUTION_API_URL_BASE}/${directory}/${name}`;
     try {
       const response = await fetch(solutionUrl);
@@ -99,13 +106,12 @@ export default function RustlingsPage() {
       return response.text();
     } catch (error) {
       console.error(`Error fetching solution for ${directory}/${name}:`, error);
-      // Re-throw to be caught by the caller and set solutionLoadError
       throw error; 
     }
   }, []);
 
   const selectExercise = useCallback(async (exerciseToSelect: Exercise | null) => {
-    if (!exerciseToSelect) {
+    if (!exerciseToSelect || !exerciseToSelect.id) { // Ensure exerciseToSelect and its id are valid
         setCurrentExercise(null);
         setEditorCode("");
         setRunOutput(null);
@@ -113,15 +119,23 @@ export default function RustlingsPage() {
         return;
     }
 
-    setCurrentExercise(prev => ({...exerciseToSelect, solutionCode: prev?.id === exerciseToSelect.id ? prev.solutionCode : undefined, solutionFetched: prev?.id === exerciseToSelect.id ? prev.solutionFetched : false }));
+    // Preserve solution if switching to the same exercise (though unlikely here), otherwise reset.
+    setCurrentExercise(prev => ({
+        ...exerciseToSelect, 
+        solutionCode: (prev && prev.id === exerciseToSelect.id) ? prev.solutionCode : undefined, 
+        solutionFetched: (prev && prev.id === exerciseToSelect.id) ? prev.solutionFetched : false 
+    }));
     setEditorCode(exerciseToSelect.code); 
     setRunOutput(null);
     setRunError(null);
     
     setIsLoadingExerciseDetails(true);
     setExerciseDetailLoadError(null);
-    setIsLoadingSolution(false); // Reset solution loading state
-    setSolutionLoadError(null); // Reset solution error state
+    // Reset solution loading state for the new exercise unless it was already fetched (covered by currentExercise update)
+    if (!exerciseToSelect.solutionFetched) {
+      setIsLoadingSolution(false);
+      setSolutionLoadError(null);
+    }
 
 
     let fetchedCode = exerciseToSelect.code;
@@ -133,7 +147,12 @@ export default function RustlingsPage() {
         ...exerciseToSelect,
         code: fetchedCode,
       };
-      setCurrentExercise(prev => ({...updatedExerciseWithCode, solutionCode: prev?.solutionCode, solutionFetched: prev?.solutionFetched}));
+      // Preserve solution details from the current state if they exist for this exercise
+      setCurrentExercise(prev => ({
+        ...updatedExerciseWithCode, 
+        solutionCode: prev?.id === updatedExerciseWithCode.id ? prev.solutionCode : undefined, 
+        solutionFetched: prev?.id === updatedExerciseWithCode.id ? prev.solutionFetched : false
+      }));
       setAllExercises(prevExercises => 
         prevExercises.map(ex => ex.id === updatedExerciseWithCode.id ? updatedExerciseWithCode : ex)
       );
@@ -141,38 +160,58 @@ export default function RustlingsPage() {
     } catch (error: any) {
       console.error("Failed to load exercise details:", error);
       setExerciseDetailLoadError(error.message || "An unknown error occurred while loading exercise details.");
+      // Even if code fetch fails, we might still want to proceed to solution fetch for the initially selected exercise if it has guide etc.
+      // Or, we might want to stop. For now, let's allow solution fetch attempt.
     } finally {
       setIsLoadingExerciseDetails(false);
     }
 
-    // After code is fetched (or if using initial code), fetch the solution
-    // But only if it hasn't been fetched before for this exercise (or if previous fetch failed and we want to retry)
-    if (updatedExerciseWithCode && (!updatedExerciseWithCode.solutionFetched || solutionLoadError)) {
+    // Fetch solution for the (potentially updated) exercise
+    // Only fetch if it hasn't been fetched before or if a previous attempt for this exercise had an error.
+    const currentExerciseForSolution = allExercises.find(ex => ex.id === updatedExerciseWithCode.id) || updatedExerciseWithCode;
+
+    if (currentExerciseForSolution && (!currentExerciseForSolution.solutionFetched || (currentExerciseForSolution.solutionFetched && solutionLoadError && currentExercise?.id === currentExerciseForSolution.id))) {
       setIsLoadingSolution(true);
-      setSolutionLoadError(null);
+      setSolutionLoadError(null); // Clear previous solution error for this attempt
       try {
-        const fetchedSolutionCode = await fetchExerciseSolution(updatedExerciseWithCode.directory, updatedExerciseWithCode.name);
+        const fetchedSolutionCode = await fetchExerciseSolution(currentExerciseForSolution.directory, currentExerciseForSolution.name);
+        
+        // Update currentExercise state and allExercises cache
         const finalExerciseState = { 
-          ...updatedExerciseWithCode, 
-          solutionCode: fetchedSolutionCode ?? undefined, // Ensure it's undefined if null
+          ...currentExerciseForSolution, 
+          code: updatedExerciseWithCode.code, // ensure we use the latest code
+          solutionCode: fetchedSolutionCode ?? undefined,
           solutionFetched: true 
         };
         setCurrentExercise(finalExerciseState);
         setAllExercises(prevExercises => 
           prevExercises.map(ex => ex.id === finalExerciseState.id ? finalExerciseState : ex)
         );
+
       } catch (error: any) {
         console.error("Failed to load exercise solution:", error);
         setSolutionLoadError(error.message || "An unknown error occurred while loading the solution.");
-        // Keep currentExercise as is, but mark solution as fetched (with error)
-        setCurrentExercise(prev => prev ? {...prev, solutionFetched: true} : null);
-
+        // Update currentExercise state and allExercises cache to mark solution as fetched (even with error)
+        setCurrentExercise(prev => prev && prev.id === currentExerciseForSolution.id ? {...prev, solutionFetched: true, code: updatedExerciseWithCode.code } : prev);
+        setAllExercises(prevExercises => 
+          prevExercises.map(ex => ex.id === currentExerciseForSolution.id ? {...ex, solutionFetched: true, code: updatedExerciseWithCode.code } : ex)
+        );
       } finally {
         setIsLoadingSolution(false);
       }
+    } else if (currentExerciseForSolution && currentExerciseForSolution.solutionFetched) {
+        // If solution was already fetched and no error, ensure currentExercise reflects this.
+        // This mostly handles re-selecting an exercise whose solution is already cached.
+        setCurrentExercise(prev => ({
+            ...currentExerciseForSolution,
+            code: updatedExerciseWithCode.code, // Make sure the latest code is set
+            solutionCode: currentExerciseForSolution.solutionCode,
+            solutionFetched: currentExerciseForSolution.solutionFetched,
+        }));
     }
 
-  }, [fetchSingleExerciseDetails, fetchExerciseSolution, solutionLoadError]);
+
+  }, [fetchSingleExerciseDetails, fetchExerciseSolution, solutionLoadError, currentExercise]); // Added currentExercise dependency for solutionLoadError logic
 
 
   useEffect(() => {
@@ -191,17 +230,19 @@ export default function RustlingsPage() {
         const exercises: Exercise[] = [];
         chapters.forEach(chapter => {
           chapter.exercises.forEach(apiEx => {
+            // Ensure id (path) is a non-empty string
+            const exerciseId = apiEx.path || `${chapter.name.toLowerCase().replace(/\s+/g, '-')}-${apiEx.name.toLowerCase().replace(/\s+/g, '-')}`;
             exercises.push({
-              id: apiEx.path,
-              name: apiEx.name,
-              category: chapter.name,
-              directory: apiEx.directory,
-              code: apiEx.code || `// Code for ${apiEx.name} will be loaded...\n\n\n\n\n\n\n// ${RUN_MARKER}`,
-              guide: apiEx.hint || "Guide not available for this exercise.",
+              id: exerciseId,
+              name: apiEx.name || "Unnamed Exercise",
+              category: chapter.name || "Uncategorized",
+              directory: apiEx.directory || "",
+              code: apiEx.code || `// Code for ${apiEx.name || "this exercise"} will be loaded...\n\n\n\n\n\n\n// ${RUN_MARKER}`,
+              guide: apiEx.hint || `Guide for ${apiEx.name || "this exercise"} not available from initial list.`,
               hints: apiEx.hints || [],
               difficulty: apiEx.difficulty || 'Easy',
               tags: apiEx.tags || [],
-              solutionFetched: false, // Initialize solutionFetched
+              solutionFetched: false, 
             });
           });
         });
@@ -223,7 +264,8 @@ export default function RustlingsPage() {
     };
 
     fetchExercisesList();
-  }, [selectExercise]); // selectExercise is memoized, so this should be fine
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // selectExercise is memoized, but if its dependencies change it could refire. Initial fetch should be once.
 
 
   const getBackendUrl = (): string => {
@@ -312,21 +354,19 @@ export default function RustlingsPage() {
 
   useEffect(() => {
     const previousCode = prevEditorCodeRef.current;
-    // Only update prevEditorCodeRef if editorCode has actually changed.
-    // This avoids issues if other state changes trigger this effect without code change.
     if (editorCode !== previousCode) {
         prevEditorCodeRef.current = editorCode;
     }
 
     if (isClient && typeof previousCode === 'string' && 
-        currentExercise && !isLoadingExerciseDetails &&
+        currentExercise && !isLoadingExerciseDetails && !isLoadingSolution &&
         previousCode.includes(RUN_MARKER) && 
         !editorCode.includes(RUN_MARKER)) {
       if (!isRunningCode) {
         handleRunCode();
       }
     }
-  }, [editorCode, isRunningCode, handleRunCode, isClient, currentExercise, isLoadingExerciseDetails]);
+  }, [editorCode, isRunningCode, handleRunCode, isClient, currentExercise, isLoadingExerciseDetails, isLoadingSolution]);
 
   const currentExerciseIndex = currentExercise ? allExercises.findIndex(ex => ex.id === currentExercise.id) : -1;
   const progressPercentage = allExercises.length > 0 && currentExerciseIndex !== -1 && isClient ? ((currentExerciseIndex + 1) / allExercises.length) * 100 : 0;
@@ -429,7 +469,7 @@ export default function RustlingsPage() {
             size="sm" 
             className="bg-accent hover:bg-accent/90 text-accent-foreground gap-1.5"
             onClick={handleRunCode}
-            disabled={isLoadingExercises || isLoadingExerciseDetails || !currentExercise || !currentExercise.code || isRunningCode}
+            disabled={isLoadingExercises || isLoadingExerciseDetails || !currentExercise || (currentExercise && !currentExercise.code) || isRunningCode}
           >
             {isRunningCode ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
             {isRunningCode ? "Running..." : "Run"}
@@ -462,7 +502,7 @@ export default function RustlingsPage() {
         </div>
         {/* Right Panel: Guide/Output/AI Help */}
         <div className="w-full md:w-2/5 overflow-y-auto">
-          {isLoadingExercises || !currentExercise ? ( // Simplified condition for initial load of panels
+          {isLoadingExercises || !currentExercise ? ( 
              <div className="p-4 h-full space-y-4">
                 <Skeleton className="h-10 w-full mb-4" /> 
                 <Skeleton className="h-8 w-1/3 mb-2" /> 
@@ -493,5 +533,6 @@ export default function RustlingsPage() {
     </div>
   );
 }
+    
 
     
