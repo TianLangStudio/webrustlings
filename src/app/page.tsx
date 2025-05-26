@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { EditorPanel } from "@/components/editor-panel";
 import { ExerciseSelector, exercises as allExercises, type Exercise } from "@/components/exercise-selector";
@@ -13,13 +13,18 @@ import Link from "next/link";
 
 export default function RustlingsPage() {
   const [currentExercise, setCurrentExercise] = useState<Exercise>(allExercises[0]);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const handleExerciseSelect = (exercise: Exercise) => {
     setCurrentExercise(exercise);
   };
 
   const currentExerciseIndex = allExercises.findIndex(ex => ex.id === currentExercise.id);
-  const progressPercentage = allExercises.length > 0 ? ((currentExerciseIndex + 1) / allExercises.length) * 100 : 0;
+  const progressPercentage = allExercises.length > 0 && isClient ? ((currentExerciseIndex + 1) / allExercises.length) * 100 : 0;
 
   const goToPreviousExercise = () => {
     if (currentExerciseIndex > 0) {
@@ -32,6 +37,12 @@ export default function RustlingsPage() {
       setCurrentExercise(allExercises[currentExerciseIndex + 1]);
     }
   };
+
+  if (!isClient) {
+    // Render a loading state or null on the server to avoid hydration mismatches with progress bar
+    // Or ensure progress bar itself handles server-side rendering gracefully (e.g. default to 0)
+    return null; 
+  }
 
   return (
     <div className="flex flex-col h-screen bg-background text-foreground">
@@ -77,13 +88,15 @@ export default function RustlingsPage() {
       <main className="flex flex-1 overflow-hidden flex-col md:flex-row">
         {/* Left Panel: Code Editor */}
         <div className="w-full md:w-3/5 border-b md:border-b-0 md:border-r border-border overflow-y-auto">
-          <EditorPanel />
+          <EditorPanel currentExercise={currentExercise} />
         </div>
         {/* Right Panel: Guide/Output/AI Help */}
         <div className="w-full md:w-2/5 overflow-y-auto">
-          <GuidePanel />
+          <GuidePanel currentExercise={currentExercise} />
         </div>
       </main>
     </div>
   );
 }
+
+    
