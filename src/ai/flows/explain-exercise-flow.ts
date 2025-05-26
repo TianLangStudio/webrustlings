@@ -11,6 +11,7 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import type { Exercise } from '@/components/exercise-selector'; // Import the Exercise type
+import type {GenerateOptions} from 'genkit/generate';
 
 // Define Zod schema based on the Exercise interface
 const ExerciseSchema = z.object({
@@ -24,11 +25,20 @@ const ExerciseSchema = z.object({
   tags: z.array(z.string()).describe("Keywords or tags associated with the exercise."),
 });
 
-const ExplainExerciseInputSchema = z.object({
+// This is the input schema for the prompt object itself
+const ExplainExercisePromptInputSchema = z.object({
   exercise: ExerciseSchema.describe("The details of the exercise to be explained."),
   // userCode: z.string().optional().describe("The user's current code for the exercise, if available. This can help the AI provide more tailored feedback."),
 });
-export type ExplainExerciseInput = z.infer<typeof ExplainExerciseInputSchema>;
+
+// This is the input schema for the overall flow, which can include the API key
+const ExplainExerciseFlowInputSchema = z.object({
+  exercise: ExerciseSchema.describe("The details of the exercise to be explained."),
+  userApiKey: z.string().optional().describe("User's API key if provided for this call."),
+  // userCode: z.string().optional().describe("The user's current code for the exercise, if available. This can help the AI provide more tailored feedback."),
+});
+export type ExplainExerciseInput = z.infer<typeof ExplainExerciseFlowInputSchema>;
+
 
 const ExplainExerciseOutputSchema = z.object({
   explanation: z.string().describe("A detailed explanation of the exercise's concept and goals."),
@@ -37,15 +47,15 @@ const ExplainExerciseOutputSchema = z.object({
 });
 export type ExplainExerciseOutput = z.infer<typeof ExplainExerciseOutputSchema>;
 
-export async function explainExercise(input: { exercise: Exercise }): Promise<ExplainExerciseOutput> {
-  // Validate input using the Zod schema before passing to the flow
-  const validatedInput = ExplainExerciseInputSchema.parse(input);
-  return explainExerciseFlow(validatedInput);
+// Exported wrapper function that calls the Genkit flow
+export async function explainExercise(input: ExplainExerciseInput): Promise<ExplainExerciseOutput> {
+  // Input validation is handled by the flow's inputSchema
+  return explainExerciseFlow(input);
 }
 
-const prompt = ai.definePrompt({
+const explainExerciseLLMPrompt = ai.definePrompt({
   name: 'explainExercisePrompt',
-  input: {schema: ExplainExerciseInputSchema},
+  input: {schema: ExplainExercisePromptInputSchema}, // Prompt takes only exercise details
   output: {schema: ExplainExerciseOutputSchema},
   prompt: `You are an expert Rust programming tutor, similar to the one found in Rustlings. Your goal is to help users understand and solve Rust exercises.
 The user is working on the following exercise:
@@ -90,16 +100,31 @@ If their code is provided, you can offer more specific feedback in the "How to P
 const explainExerciseFlow = ai.defineFlow(
   {
     name: 'explainExerciseFlow',
-    inputSchema: ExplainExerciseInputSchema,
+    inputSchema: ExplainExerciseFlowInputSchema, // Flow input includes optional userApiKey
     outputSchema: ExplainExerciseOutputSchema,
   },
-  async (input) => {
-    const {output} = await prompt(input);
+  async (flowInput) => {
+    const generateOptions: GenerateOptions = {};
+    
+    if (flowInput.userApiKey) {
+      generateOptions.auth = flowInput.userApiKey;
+      // Optional: Could adjust safety settings or other model configs if a user key is provided
+      // generateOptions.configOverrides = {
+      //   safetySettings: [{ category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' }],
+      // };
+    }
+
+    // Prepare the input for the LLM prompt object, which only expects 'exercise' (and potentially 'userCode')
+    const promptPayload = {
+      exercise: flowInput.exercise,
+      // userCode: flowInput.userCode, // if you re-add userCode to the flow input
+    };
+    
+    const {output} = await explainExerciseLLMPrompt(promptPayload, generateOptions);
+
     if (!output) {
         throw new Error("The AI failed to generate an explanation for the exercise. Please try again.");
     }
     return output;
   }
 );
-
-    

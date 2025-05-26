@@ -8,22 +8,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BookOpen, CheckCircle, MessageSquare, Sparkles, Terminal, AlertTriangle, Loader2 } from "lucide-react";
 import type { Exercise } from "./exercise-selector";
-import { explainExercise, type ExplainExerciseOutput } from "@/ai/flows/explain-exercise-flow";
+import { explainExercise, type ExplainExerciseOutput, type ExplainExerciseInput } from "@/ai/flows/explain-exercise-flow";
 import { ScrollArea } from "./ui/scroll-area";
-import { ApiKeyInstructionsDialog } from "./api-key-instructions-dialog"; // Import the new dialog
+import { ApiKeyInstructionsDialog } from "./api-key-instructions-dialog";
 
 interface GuidePanelProps {
   currentExercise: Exercise;
 }
+
+const LOCAL_STORAGE_API_KEY_NAME = "userLocalGeminiApiKey";
 
 export function GuidePanel({ currentExercise }: GuidePanelProps) {
   const [aiHelp, setAiHelp] = useState<ExplainExerciseOutput | null>(null);
   const [isLoadingAiHelp, setIsLoadingAiHelp] = useState(false);
   const [aiHelpError, setAiHelpError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("guide");
-  const [showApiKeyDialog, setShowApiKeyDialog] = useState(false); // State for API key dialog
+  const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
 
-  // Reset AI help when exercise changes and tab is not AI Help
   useEffect(() => {
     if (activeTab !== "ai-help") {
       setAiHelp(null);
@@ -35,10 +36,20 @@ export function GuidePanel({ currentExercise }: GuidePanelProps) {
     setIsLoadingAiHelp(true);
     setAiHelp(null);
     setAiHelpError(null);
+
+    const userApiKey = localStorage.getItem(LOCAL_STORAGE_API_KEY_NAME);
+    const flowInput: ExplainExerciseInput = {
+      exercise: currentExercise,
+    };
+
+    if (userApiKey) {
+      flowInput.userApiKey = userApiKey;
+    }
+
     try {
-      const response = await explainExercise({ exercise: currentExercise });
+      const response = await explainExercise(flowInput);
       setAiHelp(response);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching AI help:", error);
       let errorMessage = "An unknown error occurred while fetching AI help.";
       if (error instanceof Error) {
@@ -47,14 +58,29 @@ export function GuidePanel({ currentExercise }: GuidePanelProps) {
         errorMessage = error;
       }
 
-      // Check for API key related error messages
-      const apiKeyErrorKeywords = ["GEMINI_API_KEY", "GOOGLE_API_KEY", "API key", "APIKEY"];
-      const isApiKeyError = apiKeyErrorKeywords.some(keyword => errorMessage.toUpperCase().includes(keyword.toUpperCase()));
+      const upperErrorMessage = errorMessage.toUpperCase();
+      const isMissingGlobalKeyError = (
+        upperErrorMessage.includes("GEMINI_API_KEY") ||
+        upperErrorMessage.includes("GOOGLE_API_KEY") ||
+        (upperErrorMessage.includes("API KEY") && (upperErrorMessage.includes("PASS IN") || upperErrorMessage.includes("SET THE")))
+      );
+      
+      const isInvalidUserKeyError = userApiKey && upperErrorMessage.includes("API_KEY_INVALID"); // Or other specific messages for bad user key
 
-      if (isApiKeyError) {
-        setAiHelpError("API Key configuration is required. Please follow the instructions.");
-        setShowApiKeyDialog(true); // Show the API key instructions dialog
-      } else {
+      if (isInvalidUserKeyError) {
+        setAiHelpError("Your saved API key appears to be invalid. Please check it or try generating a new one.");
+        setShowApiKeyDialog(true); // Allow user to update/clear their key
+      } else if (isMissingGlobalKeyError && !userApiKey) {
+        // This error likely means no global key is set, and the user hasn't provided one locally.
+        setAiHelpError("API Key is required. Please configure it using the dialog.");
+        setShowApiKeyDialog(true);
+      } else if (isMissingGlobalKeyError && userApiKey) {
+        // This could mean the user's key failed in a way that looks like a general missing key error
+        // Or the flow didn't correctly use the user's key (less likely with current setup)
+        setAiHelpError("There was an issue with the API key. Please check your saved key or global configuration.");
+        setShowApiKeyDialog(true);
+      }
+      else {
         setAiHelpError(errorMessage);
       }
     } finally {
@@ -149,19 +175,24 @@ export function GuidePanel({ currentExercise }: GuidePanelProps) {
                   </Button>
                 </div>
 
-                {aiHelpError && !showApiKeyDialog && ( // Only show tab error if dialog isn't overriding
-                  <div className="p-3 rounded-md bg-destructive/20 text-destructive-foreground border border-destructive flex items-center gap-2">
-                    <AlertTriangle className="h-5 w-5" />
+                {aiHelpError && (
+                  <div className="p-3 rounded-md bg-destructive/20 text-destructive-foreground border border-destructive flex items-start gap-2">
+                    <AlertTriangle className="h-5 w-5 mt-0.5 flex-shrink-0" />
                     <div>
                       <p className="font-semibold">Error</p>
                       <p className="text-sm">{aiHelpError}</p>
+                      {showApiKeyDialog && (
+                        <Button variant="link" size="sm" className="p-0 h-auto text-destructive-foreground hover:underline" onClick={() => setShowApiKeyDialog(true)}>
+                          Open API Key Configuration
+                        </Button>
+                      )}
                     </div>
                   </div>
                 )}
 
                 {!aiHelp && !isLoadingAiHelp && !aiHelpError && (
                   <div className="p-3 rounded-md bg-muted/50 min-h-[100px] text-sm flex items-center justify-center">
-                    <p>Click "Get AI Explanation" for help with the current exercise.</p>
+                    <p className="text-center">Click "Get AI Explanation" for help with the current exercise. <br /> You may need to configure your API key via the button or dialog if prompted.</p>
                   </div>
                 )}
 
