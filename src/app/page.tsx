@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { EditorPanel } from "@/components/editor-panel";
 import { ExerciseSelector, exercises as allExercises, type Exercise } from "@/components/exercise-selector";
@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 
 const DEFAULT_BACKEND_URL = "https://rustlingsweb.tianlang.tech/execute";
 const LOCAL_STORAGE_BACKEND_URL_KEY = "userBackendUrl";
+const RUN_MARKER = "// I AM NOT DONE";
 
 export default function RustlingsPage() {
   const [currentExercise, setCurrentExercise] = useState<Exercise>(allExercises[0]);
@@ -24,6 +25,7 @@ export default function RustlingsPage() {
   const [runError, setRunError] = useState<string | null>(null);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const { toast } = useToast();
+  const prevEditorCodeRef = useRef<string>();
 
 
   useEffect(() => {
@@ -32,35 +34,6 @@ export default function RustlingsPage() {
     setRunOutput(null); // Clear previous run output
     setRunError(null); // Clear previous run error
   }, [currentExercise]);
-
-  const handleExerciseSelect = (exercise: Exercise) => {
-    setCurrentExercise(exercise);
-  };
-
-  const currentExerciseIndex = allExercises.findIndex(ex => ex.id === currentExercise.id);
-  const progressPercentage = allExercises.length > 0 && isClient ? ((currentExerciseIndex + 1) / allExercises.length) * 100 : 0;
-
-  const goToPreviousExercise = () => {
-    if (currentExerciseIndex > 0) {
-      setCurrentExercise(allExercises[currentExerciseIndex - 1]);
-    }
-  };
-
-  const goToNextExercise = () => {
-    if (currentExerciseIndex < allExercises.length - 1) {
-      setCurrentExercise(allExercises[currentExerciseIndex + 1]);
-    }
-  };
-
-  const handleResetCode = () => {
-    setEditorCode(currentExercise.code);
-    setRunOutput(null);
-    setRunError(null);
-    toast({
-      title: "Code Reset",
-      description: `Code for ${currentExercise.name} has been reset to its initial state.`,
-    });
-  };
 
   const getBackendUrl = (): string => {
     if (typeof window !== 'undefined') {
@@ -72,7 +45,7 @@ export default function RustlingsPage() {
     return DEFAULT_BACKEND_URL;
   };
 
-  const handleRunCode = async () => {
+  const handleRunCode = useCallback(async () => {
     setIsRunningCode(true);
     setRunOutput(null);
     setRunError(null);
@@ -82,7 +55,7 @@ export default function RustlingsPage() {
     const payload = {
       channel: "stable",
       mode: "debug",
-      edition: "2021", 
+      edition: "2021",
       crateType: "bin",
       tests: false,
       code: editorCode,
@@ -127,8 +100,8 @@ export default function RustlingsPage() {
       let userFriendlyErrorMessage = "An unexpected error occurred while contacting the backend.";
       
       if (error.message && error.message.toLowerCase().includes("failed to fetch")) {
-        userFriendlyErrorMessage = `Could not connect to the backend at ${backendUrl}. Please ensure the backend server is running, accessible from your network, and that CORS is configured correctly. You can verify or change the backend URL in the Settings dialog (accessible via the AI Help tab).`;
-        setShowSettingsDialog(true); // Open settings dialog on fetch failure
+        userFriendlyErrorMessage = `Could not connect to the backend at ${backendUrl}. Please ensure the backend server is running, accessible from your network, and that CORS is configured correctly. You can verify or change the backend URL in the Settings dialog.`;
+        setShowSettingsDialog(true); 
       } else if (error.message) {
         userFriendlyErrorMessage = error.message;
       }
@@ -142,6 +115,46 @@ export default function RustlingsPage() {
     } finally {
       setIsRunningCode(false);
     }
+  }, [editorCode, toast, setShowSettingsDialog]); // Dependencies for useCallback
+
+  // Effect to automatically run code when "I AM NOT DONE" is removed
+  useEffect(() => {
+    const previousCode = prevEditorCodeRef.current;
+    prevEditorCodeRef.current = editorCode; // Update ref for the next comparison
+
+    if (typeof previousCode === 'string' && 
+        previousCode.includes(RUN_MARKER) && 
+        !editorCode.includes(RUN_MARKER)) {
+      if (!isRunningCode) {
+        // console.log("Auto-running code due to 'I AM NOT DONE' removal.");
+        handleRunCode();
+      }
+    }
+  }, [editorCode, isRunningCode, handleRunCode]); // handleRunCode is now a memoized dependency
+
+  const currentExerciseIndex = allExercises.findIndex(ex => ex.id === currentExercise.id);
+  const progressPercentage = allExercises.length > 0 && isClient ? ((currentExerciseIndex + 1) / allExercises.length) * 100 : 0;
+
+  const goToPreviousExercise = () => {
+    if (currentExerciseIndex > 0) {
+      setCurrentExercise(allExercises[currentExerciseIndex - 1]);
+    }
+  };
+
+  const goToNextExercise = () => {
+    if (currentExerciseIndex < allExercises.length - 1) {
+      setCurrentExercise(allExercises[currentExerciseIndex + 1]);
+    }
+  };
+
+  const handleResetCode = () => {
+    setEditorCode(currentExercise.code);
+    setRunOutput(null);
+    setRunError(null);
+    toast({
+      title: "Code Reset",
+      description: `Code for ${currentExercise.name} has been reset to its initial state.`,
+    });
   };
 
 
@@ -214,6 +227,7 @@ export default function RustlingsPage() {
             runOutput={runOutput}
             isRunningCode={isRunningCode}
             runError={runError}
+            // Pass settings dialog state and handler
             showSettingsDialog={showSettingsDialog}
             onShowSettingsDialogChange={setShowSettingsDialog}
           />
