@@ -1,103 +1,59 @@
-import MainLayout from '@/components/layout/main-layout';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { CheckCircle, Zap, Layers } from 'lucide-react';
-import Image from 'next/image';
-import Link from 'next/link';
+'use client';
 
-export default function Home() {
+import { Button } from "@/components/ui/button";
+import { EditorPanel } from "@/components/editor-panel";
+import { ExerciseSelector } from "@/components/exercise-selector";
+import { GuidePanel } from "@/components/guide-panel";
+import { RustlingsLogo } from "@/components/rustlings-logo";
+import { ChevronLeft, ChevronRight, Play, RefreshCcw } from "lucide-react";
+import Link from "next/link";
+
+export default function RustlingsPage() {
   return (
-    <MainLayout>
-      <section className="py-12 md:py-20 text-center">
-        <h1 className="mb-6 text-4xl font-bold tracking-tight text-primary md:text-5xl lg:text-6xl">
-          Welcome to React Project Starter
-        </h1>
-        <p className="mb-8 text-lg text-foreground/80 md:text-xl">
-          Your foundation for building amazing Next.js applications with ease and style.
-        </p>
-        <div className="space-x-4">
-          <Button size="lg" asChild>
-            <Link href="/about">Learn More</Link>
+    <div className="flex flex-col h-screen bg-background text-foreground">
+      {/* Header */}
+      <header className="flex items-center justify-between px-4 py-2 border-b border-border bg-card shadow-sm">
+        <div className="flex items-center gap-4">
+          <RustlingsLogo />
+          <ExerciseSelector />
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" className="text-xs px-3 py-1 h-auto hidden md:inline-flex">
+             Select Exercise
           </Button>
-          <Button size="lg" variant="outline" asChild>
-            <Link href="/contact">Get In Touch</Link>
+          <span className="text-xs text-muted-foreground hidden lg:inline">
+            Based on work by <Link href="https://github.com/rust-lang/rustlings" target="_blank" className="text-primary hover:underline">mini</Link> and <Link href="https://github.com/ गौरी" target="_blank" className="text-primary hover:underline">FusionZhu</Link>
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" aria-label="Previous Exercise">
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+          <Button variant="ghost" size="icon" aria-label="Next Exercise">
+            <ChevronRight className="h-5 w-5" />
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1.5">
+            <RefreshCcw className="h-4 w-4" />
+            Reset
+          </Button>
+          <Button variant="default" size="sm" className="bg-accent hover:bg-accent/90 text-accent-foreground gap-1.5">
+            <Play className="h-4 w-4" />
+            Run
           </Button>
         </div>
-      </section>
+      </header>
 
-      <section className="py-12 md:py-20 bg-muted/30 rounded-lg">
-        <div className="container mx-auto px-4">
-          <h2 className="mb-12 text-center text-3xl font-semibold text-primary">Core Features</h2>
-          <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
-            <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
-              <CardHeader>
-                <div className="mb-3 flex justify-center">
-                  <Zap className="h-12 w-12 text-accent" />
-                </div>
-                <CardTitle className="text-center">Project Initialization</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <CardDescription className="text-center">
-                  Quickly start your project with a well-organized structure and essential dependencies.
-                </CardDescription>
-              </CardContent>
-            </Card>
-            <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
-              <CardHeader>
-                <div className="mb-3 flex justify-center">
-                  <Layers className="h-12 w-12 text-accent" />
-                </div>
-                <CardTitle className="text-center">Routing & Navigation</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <CardDescription className="text-center">
-                  Pre-configured Next.js routing and a responsive navigation bar for seamless user experience.
-                </CardDescription>
-              </CardContent>
-            </Card>
-            <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
-              <CardHeader>
-                <div className="mb-3 flex justify-center">
-                  <CheckCircle className="h-12 w-12 text-accent" />
-                </div>
-                <CardTitle className="text-center">Component Setup</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <CardDescription className="text-center">
-                  Basic components like Header, Footer, and Layout are ready to use and customize.
-                </CardDescription>
-              </CardContent>
-            </Card>
-          </div>
+      {/* Main Content */}
+      <main className="flex flex-1 overflow-hidden">
+        {/* Left Panel: Code Editor */}
+        <div className="w-3/5 border-r border-border overflow-y-auto">
+          <EditorPanel />
         </div>
-      </section>
-      
-      <section className="py-12 md:py-20">
-        <div className="container mx-auto px-4 grid md:grid-cols-2 gap-8 items-center">
-          <div>
-            <h2 className="text-3xl font-semibold text-primary mb-4">Modern Design</h2>
-            <p className="text-foreground/80 mb-6 text-lg">
-              Built with a clean, responsive design focusing on readability and user experience. Styled with Tailwind CSS and ShadCN UI components.
-            </p>
-            <ul className="space-y-2 text-foreground/70">
-              <li className="flex items-center gap-2"><CheckCircle className="h-5 w-5 text-accent" /> Deep Indigo primary for trust.</li>
-              <li className="flex items-center gap-2"><CheckCircle className="h-5 w-5 text-accent" /> Light Grayish-Blue background for clarity.</li>
-              <li className="flex items-center gap-2"><CheckCircle className="h-5 w-5 text-accent" /> Amber accents for interactive elements.</li>
-              <li className="flex items-center gap-2"><CheckCircle className="h-5 w-5 text-accent" /> Professional sans-serif typography.</li>
-            </ul>
-          </div>
-          <div className="rounded-lg overflow-hidden shadow-xl">
-            <Image 
-              src="https://placehold.co/600x400.png" 
-              alt="Modern UI Placeholder" 
-              width={600} 
-              height={400} 
-              className="w-full h-auto"
-              data-ai-hint="abstract modern" 
-            />
-          </div>
+        {/* Right Panel: Guide/Output/AI Help */}
+        <div className="w-2/5 overflow-y-auto">
+          <GuidePanel />
         </div>
-      </section>
-    </MainLayout>
+      </main>
+    </div>
   );
 }
