@@ -119,7 +119,7 @@ export default function RustlingsPage() {
         return;
     }
 
-    // Preserve solution if switching to the same exercise (though unlikely here), otherwise reset.
+    // Preserve solution if switching to the same exercise, otherwise reset.
     setCurrentExercise(prev => ({
         ...exerciseToSelect, 
         solutionCode: (prev && prev.id === exerciseToSelect.id) ? prev.solutionCode : undefined, 
@@ -131,7 +131,7 @@ export default function RustlingsPage() {
     
     setIsLoadingExerciseDetails(true);
     setExerciseDetailLoadError(null);
-    // Reset solution loading state for the new exercise unless it was already fetched (covered by currentExercise update)
+    // Reset solution loading state for the new exercise unless it was already fetched
     if (!exerciseToSelect.solutionFetched) {
       setIsLoadingSolution(false);
       setSolutionLoadError(null);
@@ -160,8 +160,6 @@ export default function RustlingsPage() {
     } catch (error: any) {
       console.error("Failed to load exercise details:", error);
       setExerciseDetailLoadError(error.message || "An unknown error occurred while loading exercise details.");
-      // Even if code fetch fails, we might still want to proceed to solution fetch for the initially selected exercise if it has guide etc.
-      // Or, we might want to stop. For now, let's allow solution fetch attempt.
     } finally {
       setIsLoadingExerciseDetails(false);
     }
@@ -176,10 +174,9 @@ export default function RustlingsPage() {
       try {
         const fetchedSolutionCode = await fetchExerciseSolution(currentExerciseForSolution.directory, currentExerciseForSolution.name);
         
-        // Update currentExercise state and allExercises cache
         const finalExerciseState = { 
           ...currentExerciseForSolution, 
-          code: updatedExerciseWithCode.code, // ensure we use the latest code
+          code: updatedExerciseWithCode.code, 
           solutionCode: fetchedSolutionCode ?? undefined,
           solutionFetched: true 
         };
@@ -191,7 +188,6 @@ export default function RustlingsPage() {
       } catch (error: any) {
         console.error("Failed to load exercise solution:", error);
         setSolutionLoadError(error.message || "An unknown error occurred while loading the solution.");
-        // Update currentExercise state and allExercises cache to mark solution as fetched (even with error)
         setCurrentExercise(prev => prev && prev.id === currentExerciseForSolution.id ? {...prev, solutionFetched: true, code: updatedExerciseWithCode.code } : prev);
         setAllExercises(prevExercises => 
           prevExercises.map(ex => ex.id === currentExerciseForSolution.id ? {...ex, solutionFetched: true, code: updatedExerciseWithCode.code } : ex)
@@ -200,18 +196,16 @@ export default function RustlingsPage() {
         setIsLoadingSolution(false);
       }
     } else if (currentExerciseForSolution && currentExerciseForSolution.solutionFetched) {
-        // If solution was already fetched and no error, ensure currentExercise reflects this.
-        // This mostly handles re-selecting an exercise whose solution is already cached.
         setCurrentExercise(prev => ({
             ...currentExerciseForSolution,
-            code: updatedExerciseWithCode.code, // Make sure the latest code is set
+            code: updatedExerciseWithCode.code, 
             solutionCode: currentExerciseForSolution.solutionCode,
             solutionFetched: currentExerciseForSolution.solutionFetched,
         }));
     }
 
 
-  }, [fetchSingleExerciseDetails, fetchExerciseSolution, solutionLoadError, currentExercise]); // Added currentExercise dependency for solutionLoadError logic
+  }, [fetchSingleExerciseDetails, fetchExerciseSolution, solutionLoadError, currentExercise, allExercises]); 
 
 
   useEffect(() => {
@@ -230,7 +224,11 @@ export default function RustlingsPage() {
         const exercises: Exercise[] = [];
         chapters.forEach(chapter => {
           chapter.exercises.forEach(apiEx => {
-            // Ensure id (path) is a non-empty string
+            // Filter out "00_intro/intro2"
+            if (apiEx.path === "00_intro/intro2") {
+              return; // Skip this exercise
+            }
+
             const exerciseId = apiEx.path || `${chapter.name.toLowerCase().replace(/\s+/g, '-')}-${apiEx.name.toLowerCase().replace(/\s+/g, '-')}`;
             exercises.push({
               id: exerciseId,
@@ -265,7 +263,7 @@ export default function RustlingsPage() {
 
     fetchExercisesList();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // selectExercise is memoized, but if its dependencies change it could refire. Initial fetch should be once.
+  }, []); 
 
 
   const getBackendUrl = (): string => {
@@ -533,6 +531,8 @@ export default function RustlingsPage() {
     </div>
   );
 }
+    
+
     
 
     
