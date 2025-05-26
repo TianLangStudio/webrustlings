@@ -12,6 +12,9 @@ import { ChevronLeft, ChevronRight, Play, RefreshCcw, Loader2 } from "lucide-rea
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
 
+const DEFAULT_BACKEND_URL = "https://rustlingsweb.tianlang.tech/execute";
+const LOCAL_STORAGE_BACKEND_URL_KEY = "userBackendUrl";
+
 export default function RustlingsPage() {
   const [currentExercise, setCurrentExercise] = useState<Exercise>(allExercises[0]);
   const [editorCode, setEditorCode] = useState<string>(allExercises[0].code);
@@ -19,6 +22,7 @@ export default function RustlingsPage() {
   const [runOutput, setRunOutput] = useState<RunOutput | null>(null);
   const [isRunningCode, setIsRunningCode] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
+  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const { toast } = useToast();
 
 
@@ -58,15 +62,27 @@ export default function RustlingsPage() {
     });
   };
 
+  const getBackendUrl = (): string => {
+    if (typeof window !== 'undefined') {
+      const savedUrl = localStorage.getItem(LOCAL_STORAGE_BACKEND_URL_KEY);
+      if (savedUrl) {
+        return savedUrl;
+      }
+    }
+    return DEFAULT_BACKEND_URL;
+  };
+
   const handleRunCode = async () => {
     setIsRunningCode(true);
     setRunOutput(null);
     setRunError(null);
 
+    const backendUrl = getBackendUrl();
+
     const payload = {
       channel: "stable",
       mode: "debug",
-      edition: "2021", // You might want to make this dynamic or match Rust Playground options
+      edition: "2021", 
       crateType: "bin",
       tests: false,
       code: editorCode,
@@ -74,8 +90,7 @@ export default function RustlingsPage() {
     };
 
     try {
-      // Call the external backend
-      const response = await fetch('http://192.168.0.101:5001/execute', {
+      const response = await fetch(backendUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -84,13 +99,11 @@ export default function RustlingsPage() {
       });
 
       if (!response.ok) {
-        // Try to parse error from backend, otherwise use generic message
         let errorData;
         try {
             errorData = await response.json();
         } catch (e) {
-            // If response.json() fails, it means the body wasn't valid JSON
-            errorData = { error: `HTTP error! Status: ${response.status}. Response was not valid JSON.` };
+            errorData = { error: `HTTP error! Status: ${response.status}. Response body was not valid JSON.` };
         }
         throw new Error(errorData.error || errorData.message || `HTTP error! Status: ${response.status}`);
       }
@@ -113,9 +126,9 @@ export default function RustlingsPage() {
       console.error("Failed to run code:", error);
       let userFriendlyErrorMessage = "An unexpected error occurred while contacting the backend.";
       
-      // Check for "Failed to fetch" specifically
       if (error.message && error.message.toLowerCase().includes("failed to fetch")) {
-        userFriendlyErrorMessage = "Could not connect to the backend at http://192.168.0.101:5001. Please ensure the backend server is running, accessible from your network, and that CORS is configured correctly to allow requests from this application's origin.";
+        userFriendlyErrorMessage = `Could not connect to the backend at ${backendUrl}. Please ensure the backend server is running, accessible from your network, and that CORS is configured correctly. You can verify or change the backend URL in the Settings dialog (accessible via the AI Help tab).`;
+        setShowSettingsDialog(true); // Open settings dialog on fetch failure
       } else if (error.message) {
         userFriendlyErrorMessage = error.message;
       }
@@ -133,6 +146,8 @@ export default function RustlingsPage() {
 
 
   if (!isClient) {
+    // Render nothing or a loading indicator on the server to avoid hydration mismatches
+    // with localStorage-dependent values like progressPercentage or backendUrl.
     return null; 
   }
 
@@ -199,6 +214,8 @@ export default function RustlingsPage() {
             runOutput={runOutput}
             isRunningCode={isRunningCode}
             runError={runError}
+            showSettingsDialog={showSettingsDialog}
+            onShowSettingsDialogChange={setShowSettingsDialog}
           />
         </div>
       </main>
