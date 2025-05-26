@@ -1,6 +1,7 @@
 
 'use client';
 
+import React from "react"; // Added missing React import
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
