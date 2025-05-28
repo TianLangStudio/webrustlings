@@ -204,7 +204,7 @@ export default function ExerciseViewClient({ initialExercise, allExercises }: Ex
         <div className="flex items-center gap-4">
           <div className="flex flex-col">
             <a 
-              href="https://rustlingsweb.tianlang.tech/" 
+              href="https://webrustlings.tianlang.tech/" 
               target="_blank" 
               rel="noopener noreferrer"
               aria-label="RustlingsWeb Homepage"

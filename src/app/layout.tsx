@@ -22,34 +22,21 @@ export default function RootLayout({
         <Toaster />
         <Script id="custom-analytics-scripts" strategy="afterInteractive">
           {`
-            (function() {
-              var _hmt = _hmt || [];
+          	(function() {
               var hm = document.createElement("script");
               hm.src = "https://hm.baidu.com/hm.js?5a990c2b8047428b734d3a86ee9e881f";
-              var s1 = document.getElementsByTagName("script")[0];
-              if (s1 && s1.parentNode) {
-                s1.parentNode.insertBefore(hm, s1);
-              } else {
-                // Fallback if no script tags are found (unlikely in a Next.js app)
-                // or if the first script tag doesn't have a parent (also unlikely)
-                document.head.appendChild(hm);
-              }
+              var s = document.getElementsByTagName("script")[0];
+              s.parentNode.insertBefore(hm, s);
+
+               var gg = document.createElement("script");
+              gg.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9987237856136349";
+              s.parentNode.insertBefore(hm, s);
 
               window.dataLayer = window.dataLayer || [];
               function gtag(){dataLayer.push(arguments);}
               gtag('js', new Date());
               gtag('config', 'G-JZ81SEB2BH');
-
-              var gg = document.createElement("script");
-              gg.src = "https://www.googletagmanager.com/gtag/js?id=G-JZ81SEB2BH";
-              var s2 = document.getElementsByTagName("script")[0];
-              if (s2 && s2.parentNode) {
-                s2.parentNode.insertBefore(gg, s2);
-              } else {
-                // Fallback
-                document.head.appendChild(gg);
-              }
-            })();
+})();
           `}
         </Script>
       </body>
