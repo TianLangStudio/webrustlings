@@ -16,7 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SettingsDialog } from "@/components/settings-dialog";
 import type { Exercise } from "@/lib/types";
 
-const DEFAULT_BACKEND_URL = "https://rustlingsweb.tianlang.tech/execute";
+const DEFAULT_BACKEND_URL = "https://play.rust-lang.org/execute";
 const LOCAL_STORAGE_BACKEND_URL_KEY = "userBackendUrl";
 const RUN_MARKER = "// I AM NOT DONE";
 

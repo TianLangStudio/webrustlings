@@ -25,7 +25,7 @@ interface SettingsDialogProps {
 const LOCAL_STORAGE_API_KEY_NAME = "userLocalGeminiApiKey";
 const LOCAL_STORAGE_BACKEND_URL_KEY = "userBackendUrl";
 // Matching the default from page.tsx to show as a placeholder if nothing is stored
-const DEFAULT_BACKEND_URL = "https://rustlingsweb.tianlang.tech/execute"; 
+const DEFAULT_BACKEND_URL = "https://play.rust-lang.org/execute"; 
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const [apiKeyInput, setApiKeyInput] = useState("");
