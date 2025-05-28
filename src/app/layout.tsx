@@ -30,7 +30,7 @@ export default function RootLayout({
 
                var gg = document.createElement("script");
               gg.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9987237856136349";
-              s.parentNode.insertBefore(hm, s);
+              s.parentNode.insertBefore(gg, s);
 
               window.dataLayer = window.dataLayer || [];
               function gtag(){dataLayer.push(arguments);}
